@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WeVois • Billing Dashboard</title>
-<script src="/api-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/supabase-config.js"></script>
 <style>
   :root{
     color-scheme: light;
@@ -581,27 +582,13 @@ const MODES  = ['Treasury','Self','PFMS','Cheque'];
 const DAY = 86400000, HOUR = 3600000;
 const NOW = Date.now();
 
-/* ---- API client ---- */
+/* ---- Supabase client ---- */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let sites       = [];
 let records     = {};
 
-function getToken()    { return localStorage.getItem('wv_token'); }
-function setToken(t)   { localStorage.setItem('wv_token', t); }
-function clearToken()  { localStorage.removeItem('wv_token'); }
-
-async function apiFetch(method, url, body) {
-  const opts = { method, headers: {} };
-  const token = getToken();
-  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-  if (body)  { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(API_BASE + url, opts);
-  if (res.status === 401) { clearToken(); showLoginScreen(); return null; }
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
-  return res.json();
-}
-
-/* ---- Transform API bill → frontend record format ---- */
+/* ---- Transform Supabase bill row → frontend record ---- */
 function transformBill(b) {
   if (!b) return { reported: false };
   const dates = {};
@@ -613,31 +600,33 @@ function transformBill(b) {
     reported:  true,
     billed:    b.billed,
     penalty:   b.penalty,
-    net:       b.net,
+    net:       b.billed - b.penalty,
     status:    b.status,
     dates,
     holdSince: b.hold_since ? new Date(b.hold_since).getTime() : null,
     mode:      b.payment_mode,
-    note:      b.notesheet_url || null,
+    note:      b.notesheet_path || null,   // storage path — signed URL generated on demand
     remark:    b.remark || null
   };
 }
 
-/* ---- Load all data from API ---- */
+/* ---- Load all data from Supabase ---- */
 async function loadData() {
-  const [sitesData, billsData] = await Promise.all([
-    apiFetch('GET', '/api/sites'),
-    apiFetch('GET', '/api/bills?last_months=12')
+  const keys = MONTHS.map(m => m.key);
+  const [{ data: sitesData, error: se }, { data: billsData, error: be }] = await Promise.all([
+    sb.from('sites').select('*').order('region').order('name'),
+    sb.from('bills').select('*').in('month_key', keys)
   ]);
-  if (!sitesData || !billsData) return;
+  if (se) { toast('Failed to load sites: ' + se.message); return; }
+  if (be) { toast('Failed to load bills: ' + be.message); return; }
 
-  sites   = sitesData.map(s => ({ id: s.id, name: s.name, region: s.region, base: 0 }));
+  sites   = (sitesData || []).map(s => ({ id: s.id, name: s.name, region: s.region, base: 0 }));
   records = {};
   sites.forEach(s => {
     records[s.id] = {};
     MONTHS.forEach(m => { records[s.id][m.key] = { reported: false }; });
   });
-  billsData.forEach(b => {
+  (billsData || []).forEach(b => {
     if (!records[b.site_id]) records[b.site_id] = {};
     records[b.site_id][b.month_key] = transformBill(b);
   });
@@ -656,6 +645,11 @@ function hideLoginScreen() {
   document.getElementById('logoutBtn').style.display  = '';
 }
 
+async function getProfile(userId) {
+  const { data } = await sb.from('user_profiles').select('*').eq('id', userId).single();
+  return data;
+}
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const pass  = document.getElementById('loginPass').value;
@@ -666,24 +660,19 @@ async function doLogin() {
   const btn = document.getElementById('loginBtn');
   btn.textContent = 'Signing in…'; btn.disabled = true;
   try {
-    const res = await fetch(API_BASE + '/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass })
-    });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Login failed'; errEl.style.display = 'block'; return; }
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
 
-    setToken(data.token);
-    currentUser = data.user;
-    document.getElementById('userBadgeName').textContent = `${data.user.fullName} (${data.user.role})`;
+    const profile = await getProfile(data.user.id);
+    currentUser = { ...profile, email: data.user.email };
+    document.getElementById('userBadgeName').textContent = `${profile?.full_name || email} (${profile?.role || 'user'})`;
     document.getElementById('loadingOverlay').classList.add('active');
     hideLoginScreen();
     await loadData();
     document.getElementById('loadingOverlay').classList.remove('active');
     initControls(); fillFormSelectors(); renderAll();
-  } catch {
-    errEl.textContent = 'Cannot reach server — is npm start running?';
+  } catch(e) {
+    errEl.textContent = 'Login error: ' + e.message;
     errEl.style.display = 'block';
   } finally {
     btn.textContent = 'Sign in →'; btn.disabled = false;
@@ -691,20 +680,19 @@ async function doLogin() {
 }
 
 async function initApp() {
-  const token = getToken();
-  if (!token) { showLoginScreen(); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { showLoginScreen(); return; }
 
   document.getElementById('loadingOverlay').classList.add('active');
   try {
-    const user = await apiFetch('GET', '/api/auth/me');
-    if (!user) return;
-    currentUser = user;
-    document.getElementById('userBadgeName').textContent = `${user.fullName} (${user.role})`;
+    const profile = await getProfile(session.user.id);
+    currentUser   = { ...profile, email: session.user.email };
+    document.getElementById('userBadgeName').textContent = `${profile?.full_name || session.user.email} (${profile?.role || 'user'})`;
     await loadData();
     document.getElementById('loadingOverlay').classList.remove('active');
     hideLoginScreen();
     initControls(); fillFormSelectors(); renderAll();
-  } catch {
+  } catch(e) {
     document.getElementById('loadingOverlay').classList.remove('active');
     showLoginScreen();
   }
@@ -1034,11 +1022,43 @@ async function openDrill(siteId) {
   document.getElementById('drillTitle').textContent = s.name;
   document.getElementById('drillSub').textContent   = s.region + ' · 12-month billing history';
 
-  // Fetch fresh 12-month history for this site
-  const billsData = await apiFetch('GET', `/api/bills/${siteId}`);
-  const siteRecs  = {};
+  const keys = MONTHS.map(m => m.key);
+  const { data: billsData } = await sb.from('bills').select('*').eq('site_id', siteId).in('month_key', keys);
+  const siteRecs = {};
   MONTHS.forEach(m => { siteRecs[m.key] = { reported: false }; });
   if (billsData) billsData.forEach(b => { siteRecs[b.month_key] = transformBill(b); });
+
+  const billed=[], net=[]; let totBilled=0, totPen=0, totNet=0;
+  MONTHS.forEach(m => {
+    const r = siteRecs[m.key];
+    billed.push(r?.reported?r.billed:0); net.push(r?.reported?r.net:0);
+    if (r?.reported) { totBilled+=r.billed; totPen+=r.penalty; totNet+=r.net; }
+  });
+  document.getElementById('drillKpis').innerHTML = `
+    <div class="dk"><div class="l">12-mo gross billed</div><div class="v">${short(totBilled)}</div></div>
+    <div class="dk"><div class="l">12-mo penalties</div><div class="v" style="color:var(--penalty)">${short(totPen)}</div></div>
+    <div class="dk"><div class="l">12-mo net payable</div><div class="v">${short(totNet)}</div></div>`;
+  lineChart('drillChart', MONTHS, [
+    { name:'Gross billed', color:'var(--billed)', values:billed, fill:true },
+    { name:'Net payable',  color:'var(--net)',    values:net }
+  ]);
+  document.getElementById('drillTable').innerHTML =
+    `<thead><tr><th>Month</th><th class="num">Billed</th><th class="num">Penalty</th><th class="num">Net</th><th>Stage</th><th>Days</th><th>Notesheet</th></tr></thead><tbody>` +
+    MONTHS.slice().reverse().map(m => {
+      const r = siteRecs[m.key] || { reported: false };
+      return `<tr><td>${m.label}</td>
+        <td class="num">${r.reported?rupees(r.billed):'—'}</td>
+        <td class="num" style="color:${r.reported&&r.penalty?'var(--penalty)':'inherit'}">${r.reported?(r.penalty?'−'+rupees(r.penalty):'₹0'):'—'}</td>
+        <td class="num">${r.reported?rupees(r.net):'—'}</td>
+        <td title="${dateTitle(r)}">${statusBadge(r.reported?r.status:null)}${r.reported&&r.status==='Paid'&&r.mode?`<div class="site-region" style="margin-top:2px">via ${r.mode}</div>`:''}</td>
+        <td>${ageCell(r)}</td>
+        <td>${r.reported&&r.note?`<span class="note-chip" data-note2="${siteId}" data-mk="${m.key}">📎 View</span>`:'<span class="note-none">—</span>'}</td></tr>`;
+    }).join('') + `</tbody>`;
+  document.querySelectorAll('#drillTable .note-chip').forEach(c => {
+    c.addEventListener('click', () => openNote(+c.dataset.note2, c.dataset.mk));
+  });
+  openOverlay('drillOverlay');
+}
 
   const billed=[], net=[]; let totBilled=0, totPen=0, totNet=0;
   MONTHS.forEach(m => {
@@ -1075,15 +1095,20 @@ async function openDrill(siteId) {
 /* ============================================================
    Notesheet viewer
    ============================================================ */
-function openNote(siteId, mk) {
+async function openNote(siteId, mk) {
   mk = mk || state.month;
   const r = records[siteId]?.[mk];
   const s = sites.find(x => x.id === siteId);
   if (!r || !r.note) { toast('No notesheet attached for this bill'); return; }
   document.getElementById('noteTitle').textContent = 'Signed notesheet — ' + (s?.name || '');
   document.getElementById('noteSub').textContent   = MONTHS.find(m => m.key === mk)?.label || mk;
-  document.getElementById('noteImg').src = r.note;
+  document.getElementById('noteImg').src = '';
+  document.getElementById('noteImg').alt = 'Loading…';
   openOverlay('noteOverlay');
+  const { data, error } = await sb.storage.from('notesheets').createSignedUrl(r.note, 3600);
+  if (error || !data?.signedUrl) { toast('Could not load notesheet image'); return; }
+  document.getElementById('noteImg').src = data.signedUrl;
+  document.getElementById('noteImg').alt = 'Signed notesheet';
 }
 
 /* ============================================================
@@ -1150,7 +1175,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const dv    = document.getElementById('fDate').value;
   const stamp = dv ? new Date(dv+'T12:00:00').toISOString() : new Date().toISOString();
 
-  // Build timestamps — preserve earlier stages, set/overwrite current stage
   const prev  = records[sid]?.[mk];
   const STAGE_FIELDS = { Submitted:'submitted_at', Verified:'verified_at', Approved:'approved_at', Paid:'paid_at' };
   const timestamps = {
@@ -1166,26 +1190,29 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.textContent='Saving…'; saveBtn.disabled=true;
   try {
-    // Upload notesheet first (if new file selected)
+    // Upload notesheet to Supabase Storage (if new file selected)
+    let notesheet_path = prev?.note || null;
     if (pendingNoteFile) {
-      const fd = new FormData(); fd.append('notesheet', pendingNoteFile);
-      await fetch(API_BASE+`/api/bills/${sid}/${mk}/notesheet`, {
-        method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd
-      });
+      const ext  = pendingNoteFile.name.split('.').pop() || 'jpg';
+      const path = `${sid}/${mk}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('notesheets').upload(path, pendingNoteFile, { upsert: true });
+      if (!upErr) notesheet_path = path;
+      else toast('Notesheet upload failed: ' + upErr.message);
     }
-    // Upsert bill record
-    const payload = {
+    // Upsert bill record in Supabase
+    const { data: result, error } = await sb.from('bills').upsert({
+      site_id: sid, month_key: mk,
       billed, penalty, status,
       payment_mode: status==='Paid' ? document.getElementById('fMode').value : (prev?.mode||null),
+      notesheet_path,
+      updated_by: (await sb.auth.getUser()).data.user?.id,
       ...timestamps
-    };
-    const result = await apiFetch('PUT', `/api/bills/${sid}/${mk}`, payload);
-    if (result) {
-      if (!records[sid]) records[sid]={};
-      records[sid][mk] = transformBill(result);
-      closeOverlays(); renderAll();
-      toast('Saved — '+sites.find(s=>s.id===sid)?.name+' · '+MONTHS.find(m=>m.key===mk)?.label);
-    }
+    }, { onConflict: 'site_id,month_key' }).select().single();
+    if (error) { toast('Save failed: ' + error.message); return; }
+    if (!records[sid]) records[sid]={};
+    records[sid][mk] = transformBill(result);
+    closeOverlays(); renderAll();
+    toast('Saved — '+sites.find(s=>s.id===sid)?.name+' · '+MONTHS.find(m=>m.key===mk)?.label);
   } catch (e) {
     toast('Save failed: '+e.message);
   } finally {
@@ -1231,7 +1258,7 @@ function initControls() {
   });
 
   document.getElementById('addBtn').addEventListener('click', openForm);
-  document.getElementById('logoutBtn').addEventListener('click', () => { clearToken(); location.reload(); });
+  document.getElementById('logoutBtn').addEventListener('click', () => { sb.auth.signOut().then(() => location.reload()); });
   document.getElementById('themeBtn').addEventListener('click', toggleTheme);
   document.getElementById('loginBtn').addEventListener('click', doLogin);
   document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });

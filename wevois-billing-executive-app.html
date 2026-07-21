@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WeVois • Billing Executive</title>
-<script src="/api-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/supabase-config.js"></script>
 <style>
   :root{
     color-scheme: light;
@@ -416,7 +417,7 @@
 
 <script>
 /* ============================================================
-   WeVois Billing — Executive App (API-connected)
+   WeVois Billing — Executive App (Supabase)
    ============================================================ */
 
 /* ---- Months / constants ---- */
@@ -435,32 +436,18 @@ function buildMonths() {
 }
 const MONTHS = buildMonths();
 const STAGES = ['Submitted','Verified','Approved','Paid'];
-const DAY = 86400000;
+const DAY = 86400000, HOUR = 3600000;
 const NOW = Date.now();
 
-/* ---- API client ---- */
+/* ---- Supabase client ---- */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 let sites       = [];
 let records     = {};
 let pendingNoteFile = null;
 let pickedStage = 'Submitted';
 
-function getToken()   { return localStorage.getItem('wv_token'); }
-function setToken(t)  { localStorage.setItem('wv_token', t); }
-function clearToken() { localStorage.removeItem('wv_token'); }
-
-async function apiFetch(method, url, body) {
-  const opts = { method, headers: {} };
-  const token = getToken();
-  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-  if (body)  { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-  const res = await fetch(API_BASE + url, opts);
-  if (res.status === 401) { clearToken(); showLoginScreen(); return null; }
-  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || res.statusText);
-  return res.json();
-}
-
-/* ---- Transform API bill → frontend record format ---- */
+/* ---- Transform Supabase row → frontend record ---- */
 function transformBill(b) {
   if (!b) return { reported: false };
   const dates = {};
@@ -472,36 +459,38 @@ function transformBill(b) {
     reported:  true,
     billed:    b.billed,
     penalty:   b.penalty,
-    net:       b.net,
+    net:       b.billed - b.penalty,
     status:    b.status,
     dates,
     holdSince: b.hold_since ? new Date(b.hold_since).getTime() : null,
     mode:      b.payment_mode,
-    note:      b.notesheet_url || null,
+    note:      b.notesheet_path || null,
     remark:    b.remark || null
   };
 }
 
 /* ---- Load data for assigned sites ---- */
 async function loadData() {
-  const sitesData = await apiFetch('GET', '/api/sites');
-  if (!sitesData) return;
-  sites = sitesData;
+  const keys = MONTHS.map(m => m.key);
+  const [{ data: sitesData, error: se }, { data: billsData, error: be }] = await Promise.all([
+    sb.from('sites').select('*').order('region').order('name'),
+    sb.from('bills').select('*').in('month_key', keys)
+  ]);
+  if (se) { showErr('Failed to load sites: ' + se.message); return; }
+  if (be) { showErr('Failed to load bills: ' + be.message); return; }
 
+  sites = (sitesData || []);
   records = {};
   sites.forEach(s => {
     records[s.id] = {};
     MONTHS.forEach(m => { records[s.id][m.key] = { reported: false }; });
   });
-
-  // Load bills for each assigned site
-  for (const site of sites) {
-    const billsData = await apiFetch('GET', `/api/bills/${site.id}`);
-    if (billsData) {
-      billsData.forEach(b => { records[site.id][b.month_key] = transformBill(b); });
-    }
-  }
+  (billsData || []).forEach(b => {
+    if (records[b.site_id]) records[b.site_id][b.month_key] = transformBill(b);
+  });
 }
+
+function showErr(msg) { toast(msg); }
 
 /* ---- Auth ---- */
 function showLoginScreen() {
@@ -514,6 +503,11 @@ function hideLoginScreen() {
   document.getElementById('logoutBtn').style.display    = '';
 }
 
+async function getProfile(userId) {
+  const { data } = await sb.from('user_profiles').select('*').eq('id', userId).single();
+  return data;
+}
+
 async function doLogin() {
   const email = document.getElementById('loginEmail').value.trim();
   const pass  = document.getElementById('loginPass').value;
@@ -524,15 +518,11 @@ async function doLogin() {
   const btn=document.getElementById('loginBtn');
   btn.textContent='Signing in…'; btn.disabled=true;
   try {
-    const res  = await fetch(API_BASE+'/api/auth/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password: pass })
-    });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent=data.error||'Login failed'; errEl.style.display='block'; return; }
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) { errEl.textContent=error.message; errEl.style.display='block'; return; }
 
-    setToken(data.token);
-    currentUser = data.user;
+    const profile = await getProfile(data.user.id);
+    currentUser = { ...profile, email: data.user.email };
     document.getElementById('loadingScreen').classList.add('active');
     hideLoginScreen();
     await loadData();
@@ -542,9 +532,9 @@ async function doLogin() {
     initMonthSel();
     renderAll();
     document.getElementById('whoText').innerHTML =
-      `Logged in as <b>${data.user.fullName}</b> · ${data.user.role}`;
-  } catch {
-    errEl.textContent='Cannot reach server — is npm start running?';
+      `Logged in as <b>${profile?.full_name || email}</b> · ${profile?.role || 'user'}`;
+  } catch(e) {
+    errEl.textContent='Login error: '+e.message;
     errEl.style.display='block';
   } finally {
     btn.textContent='Sign in →'; btn.disabled=false;
@@ -552,13 +542,12 @@ async function doLogin() {
 }
 
 async function initApp() {
-  const token=getToken();
-  if (!token) { showLoginScreen(); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { showLoginScreen(); return; }
   document.getElementById('loadingScreen').classList.add('active');
   try {
-    const user = await apiFetch('GET', '/api/auth/me');
-    if (!user) return;
-    currentUser = user;
+    const profile = await getProfile(session.user.id);
+    currentUser = { ...profile, email: session.user.email };
     await loadData();
     document.getElementById('loadingScreen').classList.remove('active');
     hideLoginScreen();
@@ -566,8 +555,8 @@ async function initApp() {
     initMonthSel();
     renderAll();
     document.getElementById('whoText').innerHTML =
-      `Logged in as <b>${user.fullName}</b> · ${user.role}`;
-  } catch {
+      `Logged in as <b>${profile?.full_name || session.user.email}</b> · ${profile?.role || 'user'}`;
+  } catch(e) {
     document.getElementById('loadingScreen').classList.remove('active');
     showLoginScreen();
   }
@@ -842,25 +831,29 @@ async function saveSheet() {
   const saveBtn = document.getElementById('saveBtn');
   saveBtn.textContent='Saving…'; saveBtn.disabled=true;
   try {
-    // Upload notesheet first if new file selected
+    // Upload notesheet to Supabase Storage
+    let notesheet_path = prev?.note || null;
     if (pendingNoteFile) {
-      const fd=new FormData(); fd.append('notesheet',pendingNoteFile);
-      await fetch(API_BASE+`/api/bills/${state.site}/${state.month}/notesheet`, {
-        method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd
-      });
+      const ext  = pendingNoteFile.name.split('.').pop() || 'jpg';
+      const path = `${state.site}/${state.month}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('notesheets').upload(path, pendingNoteFile, { upsert: true });
+      if (!upErr) notesheet_path = path;
+      else toast('Notesheet upload failed: ' + upErr.message);
     }
-    const payload = {
+    // Upsert bill in Supabase
+    const { data: result, error } = await sb.from('bills').upsert({
+      site_id: state.site, month_key: state.month,
       billed, penalty, status: pickedStage,
       payment_mode: pickedStage==='Paid' ? document.getElementById('uMode').value : (prev?.mode||null),
       remark: document.getElementById('uRemark').value.trim()||null,
+      notesheet_path,
+      updated_by: (await sb.auth.getUser()).data.user?.id,
       ...timestamps
-    };
-    const result = await apiFetch('PUT', `/api/bills/${state.site}/${state.month}`, payload);
-    if (result) {
-      records[state.site][state.month] = transformBill(result);
-      closeSheets(); renderAll();
-      toast('Saved — '+(sites.find(s=>s.id===state.site)?.name||'')+' · '+MONTHS.find(m=>m.key===state.month)?.label);
-    }
+    }, { onConflict: 'site_id,month_key' }).select().single();
+    if (error) { toast('Save failed: ' + error.message); return; }
+    records[state.site][state.month] = transformBill(result);
+    closeSheets(); renderAll();
+    toast('Saved — '+(sites.find(s=>s.id===state.site)?.name||'')+' · '+MONTHS.find(m=>m.key===state.month)?.label);
   } catch (e) {
     toast('Save failed: '+e.message);
   } finally {
@@ -869,14 +862,19 @@ async function saveSheet() {
 }
 
 /* ---- notesheet viewer ---- */
-function openNote() {
+async function openNote() {
   const rec=curRec();
   if (!rec.note) { toast('No notesheet attached'); return; }
   const s=sites.find(x=>x.id===state.site);
   document.getElementById('noteSub').textContent=(s?.name||'')+' · '+MONTHS.find(m=>m.key===state.month)?.label;
-  document.getElementById('noteImg').src=rec.note;
+  document.getElementById('noteImg').src='';
+  document.getElementById('noteImg').alt='Loading…';
   document.getElementById('ovl').classList.add('open');
   document.getElementById('noteSheet').classList.add('open');
+  const { data, error } = await sb.storage.from('notesheets').createSignedUrl(rec.note, 3600);
+  if (error || !data?.signedUrl) { toast('Could not load notesheet'); return; }
+  document.getElementById('noteImg').src=data.signedUrl;
+  document.getElementById('noteImg').alt='Signed notesheet';
 }
 
 /* ---- toast ---- */
@@ -912,7 +910,7 @@ document.getElementById('themeBtn').addEventListener('click',()=>{
   h.setAttribute('data-theme',dark?'light':'dark');
   document.getElementById('themeBtn').textContent=dark?'🌙':'☀️';
 });
-document.getElementById('logoutBtn').addEventListener('click',()=>{clearToken();location.reload();});
+document.getElementById('logoutBtn').addEventListener('click',()=>{sb.auth.signOut().then(()=>location.reload());});
 document.getElementById('loginBtn').addEventListener('click',doLogin);
 document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheets();});
