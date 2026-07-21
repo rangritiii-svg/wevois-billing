@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeVois • Billing Executive</title>
+<script src="/api-config.js"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --plane:#efeeea; --surface:#fcfcfb; --surface-2:#f4f3ef;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+    --billed:#2a78d6; --net:#1baf7a; --penalty:#eb6834;
+    --stage-1:#86b6ef; --stage-2:#3987e5; --stage-3:#0ca30c; --stage-4:#006300; --stage-hold:#d03b3b;
+    --good:#006300; --good-bg:rgba(12,163,12,.12);
+    --warn:#b26a00; --warn-bg:rgba(250,178,25,.16);
+    --bad:#c0392b; --bad-bg:rgba(208,59,59,.12);
+    --brand:#0f7a4f; --brand-2:#14915e;
+    --shadow:0 1px 2px rgba(11,11,11,.05),0 8px 24px rgba(11,11,11,.06);
+    --radius:16px;
+  }
+  html[data-theme="dark"]{
+    color-scheme: dark;
+    --plane:#0a0a0a; --surface:#1a1a19; --surface-2:#222220;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --billed:#3987e5; --net:#199e70; --penalty:#d95926;
+    --stage-1:#86b6ef; --stage-2:#3987e5; --stage-3:#0ca30c; --stage-4:#1baf7a; --stage-hold:#e66767;
+    --good:#0ca30c; --good-bg:rgba(12,163,12,.16);
+    --warn:#fab219; --warn-bg:rgba(250,178,25,.14);
+    --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
+    --brand:#19b374; --brand-2:#14915e;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--plane); color:var(--ink);
+    font-size:14px; line-height:1.4; -webkit-font-smoothing:antialiased;
+  }
+  .app{max-width:430px;margin:0 auto;min-height:100vh;background:var(--plane);
+    display:flex;flex-direction:column;position:relative;
+    box-shadow:0 0 40px rgba(0,0,0,.08)}
+
+  /* ---------- Login screen ---------- */
+  .login-screen{position:fixed;inset:0;background:var(--plane);display:flex;
+    align-items:center;justify-content:center;z-index:200;padding:20px}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+    box-shadow:var(--shadow);width:100%;max-width:360px;padding:30px 24px;
+    display:flex;flex-direction:column;gap:12px}
+  .login-logo{width:50px;height:50px;border-radius:13px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-2));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:800;font-size:20px;margin:0 auto 4px}
+  .login-box h2{margin:0;text-align:center;font-size:19px;font-weight:760}
+  .login-box .sub{margin:0;text-align:center;font-size:12px;color:var(--muted)}
+  .login-field label{display:block;font-size:11px;font-weight:700;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+  .login-field input{width:100%;font-family:inherit;font-size:14px;padding:11px 12px;
+    border-radius:11px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink)}
+  .login-field input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  .login-btn{border:none;border-radius:13px;background:var(--brand);color:#fff;
+    font-size:15px;font-weight:750;padding:14px;cursor:pointer;font-family:inherit;transition:.15s}
+  .login-btn:hover{background:var(--brand-2)}
+  .login-hint{font-size:11px;color:var(--muted);text-align:center}
+  .login-err{color:var(--bad);background:var(--bad-bg);border-radius:9px;
+    padding:9px 12px;font-size:12px;font-weight:650;display:none;text-align:center}
+
+  /* ---------- Loading ---------- */
+  .loading-screen{position:fixed;inset:0;background:var(--plane);display:none;
+    align-items:center;justify-content:center;z-index:100;font-size:14px;color:var(--muted)}
+  .loading-screen.active{display:flex}
+  .spinner{width:24px;height:24px;border:3px solid var(--grid);
+    border-top-color:var(--brand);border-radius:50%;
+    animation:spin .7s linear infinite;margin-right:10px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- App bar ---------- */
+  .appbar{position:sticky;top:0;z-index:30;background:var(--surface);
+    border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--brand-2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;flex:none}
+  .appbar h1{font-size:15px;margin:0;font-weight:750;letter-spacing:-.2px}
+  .appbar p{margin:1px 0 0;font-size:10.5px;color:var(--muted)}
+  .spacer{flex:1}
+  .icon-btn{width:36px;height:36px;border:1px solid var(--border);background:var(--surface);
+    border-radius:10px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
+  .logout-btn{font-size:11px;font-weight:700;border:1px solid var(--border);background:var(--surface);
+    color:var(--muted);border-radius:10px;padding:6px 10px;cursor:pointer;font-family:inherit}
+
+  /* ---------- Who / sites ---------- */
+  .whobar{padding:12px 16px 4px}
+  .who{font-size:11.5px;color:var(--muted);font-weight:650;margin-bottom:8px}
+  .who b{color:var(--ink-2)}
+  .chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--border);background:var(--surface);color:var(--ink-2);
+    font-size:12px;font-weight:650;padding:7px 13px;border-radius:20px;cursor:pointer;font-family:inherit;transition:.15s}
+  .chip.active{background:var(--brand);border-color:var(--brand);color:#fff}
+
+  .monthrow{display:flex;align-items:center;gap:8px;padding:6px 16px 10px}
+  .monthrow label{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .monthrow select{flex:1;font-family:inherit;font-size:13px;font-weight:650;padding:9px 12px;border-radius:11px;
+    border:1px solid var(--border);background:var(--surface);color:var(--ink)}
+
+  main{flex:1;padding:0 14px 96px;display:flex;flex-direction:column;gap:12px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:15px 16px;box-shadow:var(--shadow)}
+  .card h2{font-size:13.5px;margin:0 0 2px;font-weight:720}
+  .card .cap{font-size:11px;color:var(--muted);margin:0 0 10px}
+
+  /* ---------- Bill card ---------- */
+  .bill-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:12px}
+  .bill-top .t h2{font-size:15px}
+  .bill-top .t p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+    padding:3px 10px;border-radius:20px;white-space:nowrap}
+  .badge .dot{width:7px;height:7px;border-radius:50%}
+  .b-Submitted{background:rgba(137,182,239,.20);color:#1c5cab}
+  .b-Verified{background:rgba(57,135,229,.18);color:#1c5cab}
+  .b-Approved{background:var(--good-bg);color:var(--good)}
+  .b-Paid{background:var(--good-bg);color:var(--good)}
+  .b-Hold{background:var(--bad-bg);color:var(--bad)}
+  .b-None{background:var(--warn-bg);color:var(--warn)}
+  html[data-theme="dark"] .b-Submitted,html[data-theme="dark"] .b-Verified{color:#9ec5f4}
+
+  .amounts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .amt{background:var(--surface-2);border-radius:12px;padding:10px 11px}
+  .amt .l{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .amt .v{font-size:15px;font-weight:780;margin-top:3px;letter-spacing:-.3px;font-variant-numeric:tabular-nums}
+  .empty-bill{text-align:center;padding:18px 10px 8px}
+  .empty-bill .big{font-size:30px}
+  .empty-bill p{margin:6px 0 0;font-size:12.5px;color:var(--ink-2);font-weight:600}
+  .empty-bill small{color:var(--muted)}
+  .remark{margin-top:10px;font-size:12px;color:var(--ink-2);background:var(--surface-2);
+    border-radius:10px;padding:8px 11px}
+  .notesheet-chip{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;
+    color:var(--brand);font-weight:700;cursor:pointer;background:none;border:none;font-family:inherit;padding:0}
+
+  .hold-banner{display:flex;gap:8px;align-items:center;background:var(--bad-bg);color:var(--bad);
+    font-size:12px;font-weight:650;border-radius:11px;padding:9px 12px;margin-bottom:12px}
+
+  /* aging chip */
+  .age{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;
+    padding:2px 8px;border-radius:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .age.ok{background:var(--surface-2);color:var(--ink-2)}
+  .age.warn{background:var(--warn-bg);color:var(--warn)}
+  .age.bad{background:var(--bad-bg);color:var(--bad)}
+  .age.done{background:var(--good-bg);color:var(--good)}
+
+  /* ---------- Stepper ---------- */
+  .stepper{margin-top:4px}
+  .stp{display:grid;grid-template-columns:26px 1fr auto;gap:0 12px;position:relative}
+  .stp .rail{position:relative;display:flex;justify-content:center}
+  .stp .rail::before{content:"";position:absolute;top:22px;bottom:-4px;width:2px;background:var(--grid)}
+  .stp:last-child .rail::before{display:none}
+  .stp.done .rail::before{background:var(--stage-3)}
+  .stp .dotc{width:22px;height:22px;border-radius:50%;background:var(--surface-2);border:2px solid var(--axis);
+    display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;flex:none;z-index:1;margin-top:1px}
+  .stp.done .dotc{background:var(--stage-3);border-color:var(--stage-3)}
+  .stp.current .dotc{background:var(--surface);border-color:var(--stage-2);box-shadow:0 0 0 4px rgba(57,135,229,.18)}
+  .stp .body{padding-bottom:18px;min-width:0}
+  .stp .nm{font-size:13px;font-weight:720;color:var(--muted);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .stp.done .nm,.stp.current .nm{color:var(--ink)}
+  .stp .dt{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .stp .sub{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+  .stp .side{font-size:11px;color:var(--muted);text-align:right;padding-top:2px}
+
+  /* ---------- Process guide ---------- */
+  .phase{border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden;background:var(--surface-2)}
+  .phase-h{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none}
+  .phase-h .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .phase-h .pn{font-size:12.5px;font-weight:750}
+  .phase-h small{color:var(--muted);font-weight:600;font-size:10px}
+  .phase-h .tw{margin-left:auto;color:var(--muted);font-size:11px;transition:.2s}
+  .phase.open .tw{transform:rotate(180deg)}
+  .phase-b{display:none;padding:2px 12px 10px}
+  .phase.open .phase-b{display:block}
+  .phase.here{border-color:var(--stage-2);box-shadow:0 0 0 1px var(--stage-2)}
+  .gstep{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--axis);
+    border-radius:8px;padding:7px 9px;font-size:12px;font-weight:600;line-height:1.35;margin-bottom:6px}
+  .gstep small{display:block;color:var(--muted);font-weight:500;font-size:10.5px;margin-top:1px}
+  .gstep .who{display:inline-block;font-size:9px;font-weight:750;color:var(--ink-2);background:var(--surface-2);
+    border:1px solid var(--border);border-radius:5px;padding:1px 5px;margin-right:6px;text-transform:uppercase;letter-spacing:.3px;vertical-align:1px}
+  .phase[data-s="1"] .gstep{border-left-color:var(--stage-1)}
+  .phase[data-s="2"] .gstep{border-left-color:var(--stage-2)}
+  .phase[data-s="3"] .gstep{border-left-color:var(--stage-3)}
+  .phase[data-s="4"] .gstep{border-left-color:var(--stage-4)}
+  .modes-inline{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+  .mode-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:14px;background:var(--good-bg);color:var(--good)}
+
+  /* ---------- Stats ---------- */
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 11px;box-shadow:var(--shadow)}
+  .stat .l{font-size:9.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  .stat .v{font-size:15px;font-weight:780;margin-top:3px;letter-spacing:-.3px}
+
+  /* ---------- History ---------- */
+  .hrow{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--grid);cursor:pointer}
+  .hrow:last-child{border-bottom:none}
+  .hrow .m{width:74px;flex:none;font-size:12.5px;font-weight:700}
+  .hrow .amtc{flex:1;min-width:0}
+  .hrow .amtc .n{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+  .hrow .amtc .s{font-size:10.5px;color:var(--muted)}
+  .hrow .chev{color:var(--muted);font-size:14px}
+
+  /* ---------- Bottom bar ---------- */
+  .bottombar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;
+    padding:12px 14px calc(14px + env(safe-area-inset-bottom));z-index:35;
+    background:linear-gradient(to top,var(--plane) 70%,transparent)}
+  .cta{width:100%;border:none;border-radius:14px;background:var(--brand);color:#fff;
+    font-size:15px;font-weight:750;padding:15px;cursor:pointer;font-family:inherit;
+    box-shadow:0 6px 18px rgba(15,122,79,.35);transition:.15s}
+  .cta:active{transform:scale(.985)}
+  .cta:disabled{opacity:.6;cursor:not-allowed}
+
+  /* ---------- Sheets ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(10,10,10,.5);backdrop-filter:blur(2px);
+    display:none;z-index:50}
+  .overlay.open{display:block}
+  .sheet{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;
+    background:var(--surface);border-radius:20px 20px 0 0;border:1px solid var(--border);border-bottom:none;
+    z-index:55;max-height:88vh;overflow:auto;padding:10px 18px calc(20px + env(safe-area-inset-bottom));
+    display:none;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+  .sheet.open{display:block}
+  .grab{width:38px;height:4px;border-radius:4px;background:var(--axis);margin:4px auto 12px}
+  .sheet h3{margin:0 0 2px;font-size:16px;font-weight:760}
+  .sheet .sub{margin:0 0 14px;font-size:11.5px;color:var(--muted)}
+  .frm label{font-size:11px;font-weight:700;color:var(--ink-2);display:block;margin:12px 0 5px}
+  .frm input,.frm select{width:100%;font-family:inherit;font-size:14px;padding:11px 12px;border-radius:11px;
+    border:1px solid var(--border);background:var(--surface-2);color:var(--ink)}
+  .frm input:focus,.frm select:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  .frm select:disabled{opacity:.5}
+  .frm .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .stagepick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+  .sp{border:1.5px solid var(--border);background:var(--surface-2);border-radius:11px;padding:10px 8px;
+    font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--ink-2);
+    display:flex;align-items:center;gap:7px;justify-content:center}
+  .sp .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .sp.sel{border-color:var(--brand);color:var(--ink);background:var(--surface);box-shadow:0 0 0 1px var(--brand)}
+  .note-preview{margin-top:8px;border:1px dashed var(--border);border-radius:10px;padding:8px;
+    display:none;text-align:center;background:var(--surface-2)}
+  .note-preview img{max-width:100%;max-height:170px;border-radius:6px}
+  .sheet-actions{display:flex;gap:10px;margin-top:18px}
+  .btn{flex:1;border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+    padding:13px;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+
+  .noteimg{max-width:100%;border-radius:10px;border:1px solid var(--border);margin-top:10px}
+
+  .toast{position:fixed;bottom:92px;left:50%;transform:translateX(-50%) translateY(16px);
+    background:var(--ink);color:var(--plane);padding:11px 18px;border-radius:11px;font-size:13px;font-weight:600;
+    box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:.3s;z-index:90;pointer-events:none;
+    max-width:86%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .foot{padding:6px 18px 20px;font-size:10.5px;color:var(--muted);text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ── Login screen ─────────────────────────────────────────────────────────── -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">WV</div>
+    <h2>WeVois Billing</h2>
+    <p class="sub">Executive App — sign in to continue</p>
+    <div class="login-err" id="loginErr"></div>
+    <div class="login-field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="suresh@wevois.com" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label for="loginPass">Password</label>
+      <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="loginBtn">Sign in →</button>
+    <p class="login-hint">Demo: suresh@wevois.com / exec123</p>
+  </div>
+</div>
+
+<!-- ── Loading ───────────────────────────────────────────────────────────────── -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="spinner"></div> Loading…
+</div>
+
+<div class="app">
+
+  <!-- App bar -->
+  <div class="appbar">
+    <div class="logo">WV</div>
+    <div>
+      <h1>Billing Executive</h1>
+      <p>WeVois · monthly bill status &amp; entry</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="logout-btn" id="logoutBtn" style="display:none">Sign out</button>
+    <button class="icon-btn" id="themeBtn" title="Toggle light / dark">🌙</button>
+  </div>
+
+  <!-- Who / sites -->
+  <div class="whobar">
+    <div class="who" id="whoText">Loading…</div>
+    <div class="chips" id="siteChips"></div>
+  </div>
+
+  <div class="monthrow">
+    <label for="monthSel">Month</label>
+    <select id="monthSel"></select>
+  </div>
+
+  <main>
+    <!-- Bill card -->
+    <div class="card" id="billCard"></div>
+
+    <!-- Stage stepper -->
+    <div class="card">
+      <h2>Bill progress</h2>
+      <p class="cap">The four tracked stages · date each stage was reached</p>
+      <div class="stepper" id="stepper"></div>
+    </div>
+
+    <!-- Ground process guide -->
+    <div class="card">
+      <h2>What happens on the ground</h2>
+      <p class="cap">Full department workflow · your bill's current phase is highlighted</p>
+      <div id="guide"></div>
+    </div>
+
+    <!-- 12-mo stats -->
+    <div class="stats" id="stats"></div>
+
+    <!-- History -->
+    <div class="card">
+      <h2>Last 12 months</h2>
+      <p class="cap">Tap a month to open it</p>
+      <div id="history"></div>
+    </div>
+  </main>
+
+  <div class="bottombar">
+    <button class="cta" id="ctaBtn">✎ Update status</button>
+  </div>
+
+  <div class="foot">
+    Live data from local backend · <a href="/wevois-billing-dashboard.html" style="color:var(--brand)">Open Dashboard →</a>
+  </div>
+</div>
+
+<!-- Update sheet -->
+<div class="overlay" id="ovl"></div>
+<div class="sheet" id="updSheet">
+  <div class="grab"></div>
+  <h3 id="updTitle">Update bill</h3>
+  <p class="sub" id="updSub"></p>
+  <div class="frm">
+    <div class="row2">
+      <div>
+        <label for="uBilled">Gross billed (₹)</label>
+        <input type="number" id="uBilled" min="0" step="1000" placeholder="e.g. 2450000">
+      </div>
+      <div>
+        <label for="uPenalty">Penalty (₹)</label>
+        <input type="number" id="uPenalty" min="0" step="500" placeholder="e.g. 85000">
+      </div>
+    </div>
+    <label>Net payable (auto)</label>
+    <input type="text" id="uNet" readonly>
+
+    <label>Stage reached</label>
+    <div class="stagepick" id="stagePick"></div>
+
+    <div class="row2">
+      <div>
+        <label for="uDate">Date reached</label>
+        <input type="date" id="uDate">
+      </div>
+      <div>
+        <label for="uMode">Payment mode</label>
+        <select id="uMode">
+          <option>Treasury</option><option>Self</option>
+          <option>PFMS</option><option>Cheque</option>
+        </select>
+      </div>
+    </div>
+    <p class="hint" id="modeHint">Payment mode is enabled when the stage is Paid.</p>
+
+    <label for="uNote">Signed notesheet photo</label>
+    <input type="file" id="uNote" accept="image/*" capture="environment">
+    <div class="note-preview" id="notePreview"><img id="notePreviewImg" alt="notesheet preview"></div>
+
+    <label for="uRemark">Remark (optional)</label>
+    <input type="text" id="uRemark" maxlength="120" placeholder="e.g. file with SI, penalty under discussion">
+  </div>
+  <div class="sheet-actions">
+    <button class="btn" id="cancelBtn">Cancel</button>
+    <button class="btn primary" id="saveBtn">Save</button>
+  </div>
+</div>
+
+<!-- Notesheet viewer sheet -->
+<div class="sheet" id="noteSheet">
+  <div class="grab"></div>
+  <h3>Signed notesheet</h3>
+  <p class="sub" id="noteSub"></p>
+  <div style="text-align:center"><img class="noteimg" id="noteImg" alt="notesheet"></div>
+  <div class="sheet-actions"><button class="btn" id="noteClose">Close</button></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   WeVois Billing — Executive App (API-connected)
+   ============================================================ */
+
+/* ---- Months / constants ---- */
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function buildMonths() {
+  const now=new Date(); const arr=[];
+  for (let i=11;i>=0;i--) {
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    arr.push({
+      key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+      short: `${MONTH_NAMES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+    });
+  }
+  return arr;
+}
+const MONTHS = buildMonths();
+const STAGES = ['Submitted','Verified','Approved','Paid'];
+const DAY = 86400000;
+const NOW = Date.now();
+
+/* ---- API client ---- */
+let currentUser = null;
+let sites       = [];
+let records     = {};
+let pendingNoteFile = null;
+let pickedStage = 'Submitted';
+
+function getToken()   { return localStorage.getItem('wv_token'); }
+function setToken(t)  { localStorage.setItem('wv_token', t); }
+function clearToken() { localStorage.removeItem('wv_token'); }
+
+async function apiFetch(method, url, body) {
+  const opts = { method, headers: {} };
+  const token = getToken();
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body)  { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(API_BASE + url, opts);
+  if (res.status === 401) { clearToken(); showLoginScreen(); return null; }
+  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || res.statusText);
+  return res.json();
+}
+
+/* ---- Transform API bill → frontend record format ---- */
+function transformBill(b) {
+  if (!b) return { reported: false };
+  const dates = {};
+  if (b.submitted_at) dates.Submitted = new Date(b.submitted_at).getTime();
+  if (b.verified_at)  dates.Verified  = new Date(b.verified_at).getTime();
+  if (b.approved_at)  dates.Approved  = new Date(b.approved_at).getTime();
+  if (b.paid_at)      dates.Paid      = new Date(b.paid_at).getTime();
+  return {
+    reported:  true,
+    billed:    b.billed,
+    penalty:   b.penalty,
+    net:       b.net,
+    status:    b.status,
+    dates,
+    holdSince: b.hold_since ? new Date(b.hold_since).getTime() : null,
+    mode:      b.payment_mode,
+    note:      b.notesheet_url || null,
+    remark:    b.remark || null
+  };
+}
+
+/* ---- Load data for assigned sites ---- */
+async function loadData() {
+  const sitesData = await apiFetch('GET', '/api/sites');
+  if (!sitesData) return;
+  sites = sitesData;
+
+  records = {};
+  sites.forEach(s => {
+    records[s.id] = {};
+    MONTHS.forEach(m => { records[s.id][m.key] = { reported: false }; });
+  });
+
+  // Load bills for each assigned site
+  for (const site of sites) {
+    const billsData = await apiFetch('GET', `/api/bills/${site.id}`);
+    if (billsData) {
+      billsData.forEach(b => { records[site.id][b.month_key] = transformBill(b); });
+    }
+  }
+}
+
+/* ---- Auth ---- */
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display  = 'flex';
+  document.getElementById('loadingScreen').classList.remove('active');
+  document.getElementById('logoutBtn').style.display    = 'none';
+}
+function hideLoginScreen() {
+  document.getElementById('loginScreen').style.display  = 'none';
+  document.getElementById('logoutBtn').style.display    = '';
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display='none';
+  if (!email||!pass) { errEl.textContent='Enter email and password'; errEl.style.display='block'; return; }
+
+  const btn=document.getElementById('loginBtn');
+  btn.textContent='Signing in…'; btn.disabled=true;
+  try {
+    const res  = await fetch(API_BASE+'/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent=data.error||'Login failed'; errEl.style.display='block'; return; }
+
+    setToken(data.token);
+    currentUser = data.user;
+    document.getElementById('loadingScreen').classList.add('active');
+    hideLoginScreen();
+    await loadData();
+    document.getElementById('loadingScreen').classList.remove('active');
+    const state_site = sites.length > 0 ? sites[0].id : null;
+    if (state_site) state.site = state_site;
+    initMonthSel();
+    renderAll();
+    document.getElementById('whoText').innerHTML =
+      `Logged in as <b>${data.user.fullName}</b> · ${data.user.role}`;
+  } catch {
+    errEl.textContent='Cannot reach server — is npm start running?';
+    errEl.style.display='block';
+  } finally {
+    btn.textContent='Sign in →'; btn.disabled=false;
+  }
+}
+
+async function initApp() {
+  const token=getToken();
+  if (!token) { showLoginScreen(); return; }
+  document.getElementById('loadingScreen').classList.add('active');
+  try {
+    const user = await apiFetch('GET', '/api/auth/me');
+    if (!user) return;
+    currentUser = user;
+    await loadData();
+    document.getElementById('loadingScreen').classList.remove('active');
+    hideLoginScreen();
+    if (sites.length > 0) state.site = sites[0].id;
+    initMonthSel();
+    renderAll();
+    document.getElementById('whoText').innerHTML =
+      `Logged in as <b>${user.fullName}</b> · ${user.role}`;
+  } catch {
+    document.getElementById('loadingScreen').classList.remove('active');
+    showLoginScreen();
+  }
+}
+
+/* ============================================================
+   Formatting
+   ============================================================ */
+const inr = new Intl.NumberFormat('en-IN',{maximumFractionDigits:0});
+function rupees(v) { return '₹'+inr.format(Math.round(v)); }
+function short(v) {
+  const a=Math.abs(v);
+  if (a>=1e7) return '₹'+(v/1e7).toFixed(2)+' Cr';
+  if (a>=1e5) return '₹'+(v/1e5).toFixed(2)+' L';
+  return '₹'+inr.format(Math.round(v));
+}
+function fmtD(ms) { const d=new Date(ms); return d.getDate()+' '+MONTH_NAMES[d.getMonth()]+' '+String(d.getFullYear()).slice(2); }
+
+/* ---- aging ---- */
+function lastStageDate(rec) {
+  if (!rec||!rec.reported) return null;
+  let last=null;
+  if (rec.dates) STAGES.forEach(k=>{if(rec.dates[k]!=null&&(last==null||rec.dates[k]>last))last=rec.dates[k];});
+  if (rec.holdSince&&(last==null||rec.holdSince>last)) last=rec.holdSince;
+  return last;
+}
+function ageDays(rec) { const d=lastStageDate(rec); if(d==null)return null; return Math.max(0,Math.floor((Date.now()-d)/DAY)); }
+function cycleDays(rec) {
+  if(!rec||!rec.dates||rec.dates.Paid==null||rec.dates.Submitted==null)return null;
+  return Math.max(0,Math.round((rec.dates.Paid-rec.dates.Submitted)/DAY));
+}
+function ageChip(rec) {
+  if(!rec||!rec.reported)return '';
+  if(rec.status==='Paid'){const c=cycleDays(rec);return `<span class="age done">${c!=null?c+'d cycle':'✓ paid'}</span>`;}
+  const a=ageDays(rec);if(a==null)return '';
+  const cls=a>14?'bad':(a>7?'warn':'ok');
+  return `<span class="age ${cls}">${a}d at stage</span>`;
+}
+
+/* ============================================================
+   State
+   ============================================================ */
+const state = { site: null, month: MONTHS[MONTHS.length-1].key };
+
+function curRec() { return records[state.site]?.[state.month] || { reported: false }; }
+
+/* ============================================================
+   Renders
+   ============================================================ */
+function statusBadge(status) {
+  if (!status) return `<span class="badge b-None"><span class="dot" style="background:var(--warn)"></span>Not entered</span>`;
+  const map={Submitted:'var(--stage-1)',Verified:'var(--stage-2)',Approved:'var(--stage-3)',Paid:'var(--stage-4)','On Hold':'var(--stage-hold)'};
+  const cls=status==='On Hold'?'b-Hold':('b-'+status);
+  return `<span class="badge ${cls}"><span class="dot" style="background:${map[status]}"></span>${status}</span>`;
+}
+
+function renderChips() {
+  const el=document.getElementById('siteChips');
+  el.innerHTML=sites.map(s=>
+    `<button class="chip ${state.site===s.id?'active':''}" data-site="${s.id}">${s.name}</button>`
+  ).join('');
+  el.querySelectorAll('button.chip').forEach(c=>
+    c.addEventListener('click',()=>{state.site=+c.dataset.site;renderAll();})
+  );
+}
+
+function renderBillCard() {
+  const s   = sites.find(x=>x.id===state.site);
+  const rec = curRec();
+  const mLabel = MONTHS.find(m=>m.key===state.month)?.label||state.month;
+  const el  = document.getElementById('billCard');
+  if (!rec.reported) {
+    el.innerHTML=`
+      <div class="bill-top">
+        <div class="t"><h2>${s?.name||'—'}</h2><p>${s?.region||''} · ${mLabel}</p></div>
+        <div class="spacer"></div>${statusBadge(null)}
+      </div>
+      <div class="empty-bill">
+        <div class="big">🧾</div>
+        <p>No bill entered for ${mLabel} yet</p>
+        <small>Accounts prepares the bill by the 30th — enter it once the cover letter is ready.</small>
+      </div>`;
+    document.getElementById('ctaBtn').textContent='＋ Enter this month\'s bill';
+    return;
+  }
+  const hold = rec.status==='On Hold'
+    ?`<div class="hold-banner">⚠️ On hold since ${rec.holdSince?fmtD(rec.holdSince):'—'} — follow up with the department.</div>`:'';
+  el.innerHTML=`
+    <div class="bill-top">
+      <div class="t"><h2>${s?.name||'—'}</h2><p>${s?.region||''} · ${mLabel}</p></div>
+      <div class="spacer"></div>
+      <div style="text-align:right">${statusBadge(rec.status)}<div style="margin-top:5px">${ageChip(rec)}</div></div>
+    </div>
+    ${hold}
+    <div class="amounts">
+      <div class="amt"><div class="l">Gross billed</div><div class="v">${short(rec.billed)}</div></div>
+      <div class="amt"><div class="l">Penalty</div><div class="v" style="color:${rec.penalty?'var(--penalty)':'inherit'}">${rec.penalty?'−'+short(rec.penalty):'₹0'}</div></div>
+      <div class="amt"><div class="l">Net payable</div><div class="v">${short(rec.net)}</div></div>
+    </div>
+    ${rec.status==='Paid'&&rec.mode?`<div class="remark">💰 Paid via <b>${rec.mode}</b>${rec.dates?.Paid?' on '+fmtD(rec.dates.Paid):''}</div>`:''}
+    ${rec.remark?`<div class="remark">🗒 ${rec.remark}</div>`:''}
+    ${rec.note?`<button class="notesheet-chip" id="viewNote">📎 View signed notesheet</button>`:''}`;
+  const vn=document.getElementById('viewNote');
+  if (vn) vn.addEventListener('click',openNote);
+  document.getElementById('ctaBtn').textContent='✎ Update status';
+}
+
+function renderStepper() {
+  const rec=curRec(); const el=document.getElementById('stepper');
+  const subs={Submitted:'Accounts → cover letter → CTO (receiving on WhatsApp)',Verified:'LDC file · SI check · SBM Head · penalties',Approved:'Accounts pre-check · EO · advice letter · CMC/EO (A1–A3)',Paid:'Cash branch — Treasury / Self / PFMS / Cheque'};
+  if (!rec.reported) {
+    el.innerHTML=STAGES.map((st,i)=>`
+      <div class="stp">
+        <div class="rail"><div class="dotc">${i+1}</div></div>
+        <div class="body"><div class="nm">${st}</div><div class="sub">${subs[st]}</div></div>
+        <div class="side"></div>
+      </div>`).join('');
+    return;
+  }
+  const reachedIdx=rec.status==='On Hold'
+    ?STAGES.reduce((mx,k,i)=>rec.dates&&rec.dates[k]!=null?i:mx,-1)
+    :STAGES.indexOf(rec.status);
+  el.innerHTML=STAGES.map((st,i)=>{
+    const done=i<reachedIdx||(i===reachedIdx&&st==='Paid'&&rec.status==='Paid');
+    const isCur=i===reachedIdx&&rec.status!=='Paid';
+    const cls=done?'done':(isCur?'current':'');
+    const dt=rec.dates&&rec.dates[st]!=null?fmtD(rec.dates[st]):'';
+    const chip=isCur?ageChip(rec):'';
+    const modeTxt=st==='Paid'&&rec.status==='Paid'&&rec.mode?` · via ${rec.mode}`:'';
+    return `<div class="stp ${cls}">
+      <div class="rail"><div class="dotc">${done?'✓':i+1}</div></div>
+      <div class="body">
+        <div class="nm">${st} ${chip}</div>
+        ${dt?`<div class="dt">${dt}${modeTxt}</div>`:''}
+        <div class="sub">${subs[st]}</div>
+      </div>
+      <div class="side"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderGuide() {
+  const rec=curRec();
+  const curPhase=!rec.reported?0:(rec.status==='On Hold'?(rec.dates?.Verified!=null?2:1):STAGES.indexOf(rec.status)+1);
+  const P=[
+    {n:'Submission',s:1,c:'var(--stage-1)',steps:[['Accounts','Monthly bill prepared','by the 30th of the month'],['Ravi','Cover letter','30th of the month'],['Accounts','Submitted to CTO','next working day · receiving captured on WhatsApp']]},
+    {n:'Verification',s:2,c:'var(--stage-2)',steps:[['Dept.','Received in department',''],['LDC','Bill put on file',''],['SI','Verification of the bill',''],['OIC','SBM Head verifies',''],['Dept.','Penalties assessed','deductions applied to the bill']]},
+    {n:'Approval',s:3,c:'var(--stage-3)',steps:[['Accounts','Pre-check','before EO approval'],['EO','Approval',''],['Accounts','Payment advice letter ready',''],['CMC / EO','Final approval','advice copies A1 · A2 · A3']]},
+    {n:'Payment',s:4,c:'var(--stage-4)',steps:[['Cash branch','Payment released','MODES'],['WeVois','Payment received ✓','']]}
+  ];
+  document.getElementById('guide').innerHTML=P.map((p,i)=>{
+    const here=(i+1)===curPhase;
+    return `<div class="phase ${here?'open here':''}" data-s="${p.s}">
+      <div class="phase-h">
+        <span class="pdot" style="background:${p.c}"></span>
+        <span class="pn">${p.n}</span>
+        <small>· tracked as "${STAGES[i]}"${here?' · you are here':''}</small>
+        <span class="tw">▾</span>
+      </div>
+      <div class="phase-b">${p.steps.map(st=>`
+        <div class="gstep"><span class="who">${st[0]}</span>${st[1]}
+          ${st[2]==='MODES'
+            ?`<small>settlement mode:</small><div class="modes-inline"><span class="mode-pill">Treasury</span><span class="mode-pill">Self</span><span class="mode-pill">PFMS</span><span class="mode-pill">Cheque</span></div>`
+            :(st[2]?`<small>${st[2]}</small>`:'')}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.phase-h').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+}
+
+function renderStats() {
+  let billed=0,pen=0,cycles=[],paid=0;
+  MONTHS.forEach(m=>{ const r=records[state.site]?.[m.key]; if(!r||!r.reported)return; billed+=r.billed;pen+=r.penalty;if(r.status==='Paid'){paid++;const c=cycleDays(r);if(c!=null)cycles.push(c);} });
+  const avg=cycles.length?Math.round(cycles.reduce((a,b)=>a+b,0)/cycles.length):null;
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="l">12-mo billed</div><div class="v">${short(billed)}</div></div>
+    <div class="stat"><div class="l">Penalties</div><div class="v" style="color:var(--penalty)">${short(pen)}</div></div>
+    <div class="stat"><div class="l">Avg cycle</div><div class="v">${avg!=null?avg+' days':'—'}</div></div>`;
+}
+
+function renderHistory() {
+  document.getElementById('history').innerHTML=MONTHS.slice().reverse().map(m=>{
+    const r=records[state.site]?.[m.key]||{reported:false};
+    return `<div class="hrow" data-mk="${m.key}">
+      <div class="m">${m.short}</div>
+      <div class="amtc">
+        <div class="n">${r.reported?short(r.net):'—'}</div>
+        <div class="s">${r.reported?(r.penalty?'penalty −'+short(r.penalty):'no penalty'):'not entered'}</div>
+      </div>
+      ${r.reported?statusBadge(r.status):''}
+      ${ageChip(r)}
+      <div class="chev">›</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('.hrow').forEach(h=>h.addEventListener('click',()=>{
+    state.month=h.dataset.mk;
+    document.getElementById('monthSel').value=state.month;
+    renderAll(); window.scrollTo({top:0,behavior:'smooth'});
+  }));
+}
+
+function renderAll() { renderChips(); renderBillCard(); renderStepper(); renderGuide(); renderStats(); renderHistory(); }
+
+/* ============================================================
+   Update sheet — API-backed save
+   ============================================================ */
+function syncNet() {
+  const b=+document.getElementById('uBilled').value||0, p=+document.getElementById('uPenalty').value||0;
+  document.getElementById('uNet').value=rupees(Math.max(0,b-p));
+}
+function syncMode() {
+  const paid=pickedStage==='Paid';
+  document.getElementById('uMode').disabled=!paid;
+  document.getElementById('modeHint').textContent=paid?'Cash-branch settlement mode for this payment.':'Payment mode is enabled when the stage is Paid.';
+}
+function renderStagePick() {
+  const opts=[...STAGES,'On Hold'];
+  const map={Submitted:'var(--stage-1)',Verified:'var(--stage-2)',Approved:'var(--stage-3)',Paid:'var(--stage-4)','On Hold':'var(--stage-hold)'};
+  document.getElementById('stagePick').innerHTML=opts.map(o=>
+    `<button class="sp ${pickedStage===o?'sel':''}" data-st="${o}"><span class="dot" style="background:${map[o]}"></span>${o}</button>`
+  ).join('');
+  document.querySelectorAll('.sp').forEach(b=>b.addEventListener('click',()=>{pickedStage=b.dataset.st;renderStagePick();syncMode();}));
+}
+function openSheet() {
+  const s=sites.find(x=>x.id===state.site);
+  const rec=curRec();
+  const mLabel=MONTHS.find(m=>m.key===state.month)?.label||state.month;
+  document.getElementById('updTitle').textContent=rec.reported?'Update status':"Enter this month's bill";
+  document.getElementById('updSub').textContent=(s?.name||'')+'  ·  '+mLabel;
+  document.getElementById('uBilled').value=rec.reported?rec.billed:'';
+  document.getElementById('uPenalty').value=rec.reported?rec.penalty:'';
+  document.getElementById('uRemark').value=rec.remark||'';
+  pendingNoteFile=null;
+  document.getElementById('uNote').value='';
+  document.getElementById('notePreview').style.display='none';
+  if (!rec.reported) pickedStage='Submitted';
+  else if (rec.status==='On Hold') pickedStage='On Hold';
+  else { const i=STAGES.indexOf(rec.status); pickedStage=i<STAGES.length-1?STAGES[i+1]:'Paid'; }
+  if (rec.reported&&rec.mode) document.getElementById('uMode').value=rec.mode;
+  const today=new Date();
+  document.getElementById('uDate').value=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  renderStagePick(); syncMode(); syncNet();
+  document.getElementById('ovl').classList.add('open');
+  document.getElementById('updSheet').classList.add('open');
+}
+function closeSheets() {
+  document.getElementById('ovl').classList.remove('open');
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open'));
+}
+
+async function saveSheet() {
+  const billed  = +document.getElementById('uBilled').value  || 0;
+  const penalty = +document.getElementById('uPenalty').value || 0;
+  if (billed<=0)      { toast('Enter a gross billed amount'); return; }
+  if (penalty>billed) { toast("Penalty can't exceed billed amount"); return; }
+
+  const dv    = document.getElementById('uDate').value;
+  const stamp = dv ? new Date(dv+'T12:00:00').toISOString() : new Date().toISOString();
+  const prev  = curRec();
+  const STAGE_FIELDS = { Submitted:'submitted_at', Verified:'verified_at', Approved:'approved_at', Paid:'paid_at' };
+  const timestamps = {
+    submitted_at: prev?.dates?.Submitted ? new Date(prev.dates.Submitted).toISOString() : null,
+    verified_at:  prev?.dates?.Verified  ? new Date(prev.dates.Verified).toISOString()  : null,
+    approved_at:  prev?.dates?.Approved  ? new Date(prev.dates.Approved).toISOString()  : null,
+    paid_at:      prev?.dates?.Paid      ? new Date(prev.dates.Paid).toISOString()      : null,
+    hold_since:   null
+  };
+  if (pickedStage==='On Hold') timestamps.hold_since = stamp;
+  else timestamps[STAGE_FIELDS[pickedStage]] = stamp;
+
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.textContent='Saving…'; saveBtn.disabled=true;
+  try {
+    // Upload notesheet first if new file selected
+    if (pendingNoteFile) {
+      const fd=new FormData(); fd.append('notesheet',pendingNoteFile);
+      await fetch(API_BASE+`/api/bills/${state.site}/${state.month}/notesheet`, {
+        method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd
+      });
+    }
+    const payload = {
+      billed, penalty, status: pickedStage,
+      payment_mode: pickedStage==='Paid' ? document.getElementById('uMode').value : (prev?.mode||null),
+      remark: document.getElementById('uRemark').value.trim()||null,
+      ...timestamps
+    };
+    const result = await apiFetch('PUT', `/api/bills/${state.site}/${state.month}`, payload);
+    if (result) {
+      records[state.site][state.month] = transformBill(result);
+      closeSheets(); renderAll();
+      toast('Saved — '+(sites.find(s=>s.id===state.site)?.name||'')+' · '+MONTHS.find(m=>m.key===state.month)?.label);
+    }
+  } catch (e) {
+    toast('Save failed: '+e.message);
+  } finally {
+    saveBtn.textContent='Save'; saveBtn.disabled=false;
+  }
+}
+
+/* ---- notesheet viewer ---- */
+function openNote() {
+  const rec=curRec();
+  if (!rec.note) { toast('No notesheet attached'); return; }
+  const s=sites.find(x=>x.id===state.site);
+  document.getElementById('noteSub').textContent=(s?.name||'')+' · '+MONTHS.find(m=>m.key===state.month)?.label;
+  document.getElementById('noteImg').src=rec.note;
+  document.getElementById('ovl').classList.add('open');
+  document.getElementById('noteSheet').classList.add('open');
+}
+
+/* ---- toast ---- */
+let toastT;
+function toast(msg) { const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600); }
+
+/* ============================================================
+   Wire up
+   ============================================================ */
+function initMonthSel() {
+  const ms=document.getElementById('monthSel');
+  ms.innerHTML=MONTHS.slice().reverse().map(m=>`<option value="${m.key}">${m.label}</option>`).join('');
+  ms.value=state.month;
+  ms.addEventListener('change',e=>{state.month=e.target.value;renderAll();});
+}
+
+document.getElementById('ctaBtn').addEventListener('click',openSheet);
+document.getElementById('cancelBtn').addEventListener('click',closeSheets);
+document.getElementById('noteClose').addEventListener('click',closeSheets);
+document.getElementById('ovl').addEventListener('click',closeSheets);
+document.getElementById('saveBtn').addEventListener('click',saveSheet);
+document.getElementById('uBilled').addEventListener('input',syncNet);
+document.getElementById('uPenalty').addEventListener('input',syncNet);
+document.getElementById('uNote').addEventListener('change',e=>{
+  const f=e.target.files[0]; if (!f) return;
+  pendingNoteFile=f;
+  const rd=new FileReader();
+  rd.onload=()=>{document.getElementById('notePreview').style.display='block';document.getElementById('notePreviewImg').src=rd.result;};
+  rd.readAsDataURL(f);
+});
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const h=document.documentElement,dark=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme',dark?'light':'dark');
+  document.getElementById('themeBtn').textContent=dark?'🌙':'☀️';
+});
+document.getElementById('logoutBtn').addEventListener('click',()=>{clearToken();location.reload();});
+document.getElementById('loginBtn').addEventListener('click',doLogin);
+document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheets();});
+
+/* ── Boot ── */
+initApp();
+</script>
+</body>
+</html>

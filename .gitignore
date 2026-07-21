@@ -1,0 +1,5 @@
+node_modules/
+wevois.db
+uploads/
+*.log
+.env

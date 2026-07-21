@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeVois • Billing Dashboard</title>
+<script src="/api-config.js"></script>
+<style>
+  :root{
+    color-scheme: light;
+    --plane:#f9f9f7; --surface:#fcfcfb; --surface-2:#f4f3ef;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+    --billed:#2a78d6; --net:#1baf7a; --penalty:#eb6834;
+    --stage-1:#86b6ef; --stage-2:#3987e5; --stage-3:#0ca30c; --stage-4:#006300; --stage-hold:#d03b3b;
+    --good:#006300; --good-bg:rgba(12,163,12,.12);
+    --warn:#b26a00; --warn-bg:rgba(250,178,25,.16);
+    --bad:#c0392b; --bad-bg:rgba(208,59,59,.12);
+    --brand:#0f7a4f; --brand-2:#14915e;
+    --shadow:0 1px 2px rgba(11,11,11,.05),0 8px 24px rgba(11,11,11,.06);
+    --radius:14px;
+  }
+  html[data-theme="dark"]{
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#222220;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --billed:#3987e5; --net:#199e70; --penalty:#d95926;
+    --stage-1:#86b6ef; --stage-2:#3987e5; --stage-3:#0ca30c; --stage-4:#1baf7a; --stage-hold:#e66767;
+    --good:#0ca30c; --good-bg:rgba(12,163,12,.16);
+    --warn:#fab219; --warn-bg:rgba(250,178,25,.14);
+    --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
+    --brand:#19b374; --brand-2:#14915e;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--plane); color:var(--ink);
+    font-size:14px; line-height:1.4; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1280px;margin:0 auto;padding:18px 22px 60px}
+
+  /* ---------- Login screen ---------- */
+  .login-screen{position:fixed;inset:0;background:var(--plane);display:flex;
+    align-items:center;justify-content:center;z-index:200;padding:20px}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;
+    box-shadow:var(--shadow);width:100%;max-width:360px;padding:32px 28px;
+    display:flex;flex-direction:column;gap:14px}
+  .login-logo{width:52px;height:52px;border-radius:14px;
+    background:linear-gradient(135deg,var(--brand),var(--brand-2));
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:800;font-size:22px;margin:0 auto 4px}
+  .login-box h2{margin:0;text-align:center;font-size:20px;font-weight:760}
+  .login-box .sub{margin:0;text-align:center;font-size:12.5px;color:var(--muted)}
+  .login-field label{display:block;font-size:11px;font-weight:700;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+  .login-field input{width:100%;font-family:inherit;font-size:14px;padding:11px 12px;
+    border-radius:11px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink)}
+  .login-field input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  .login-btn{border:none;border-radius:12px;background:var(--brand);color:#fff;
+    font-size:15px;font-weight:750;padding:13px;cursor:pointer;font-family:inherit;transition:.15s}
+  .login-btn:hover{background:var(--brand-2)}
+  .login-hint{font-size:11.5px;color:var(--muted);text-align:center}
+  .login-err{color:var(--bad);background:var(--bad-bg);border-radius:9px;
+    padding:9px 12px;font-size:12.5px;font-weight:650;display:none;text-align:center}
+
+  /* ---------- Loading overlay ---------- */
+  .loading-overlay{position:fixed;inset:0;background:var(--plane);display:none;
+    align-items:center;justify-content:center;z-index:100;font-size:14px;color:var(--muted)}
+  .loading-overlay.active{display:flex}
+  .spinner{width:28px;height:28px;border:3px solid var(--grid);
+    border-top-color:var(--brand);border-radius:50%;
+    animation:spin .7s linear infinite;margin-right:12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand-2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;letter-spacing:.5px;box-shadow:var(--shadow)}
+  .brand h1{font-size:17px;margin:0;font-weight:750;letter-spacing:-.2px}
+  .brand p{margin:1px 0 0;font-size:11.5px;color:var(--ink-2)}
+  .spacer{flex:1}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--ink);
+    padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;transition:.15s;font-family:inherit}
+  .btn:hover{background:var(--surface-2)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.primary:hover{background:var(--brand-2)}
+  .icon-btn{width:38px;height:38px;padding:0;justify-content:center}
+  .user-badge{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .user-badge strong{color:var(--ink-2)}
+
+  /* ---------- Controls ---------- */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  select,input[type="text"],input[type="number"],input[type="date"],input[type="file"]{
+    font-family:inherit;font-size:13px;padding:8px 11px;border-radius:9px;
+    border:1px solid var(--border);background:var(--surface);color:var(--ink);min-width:150px}
+  input[type="text"]{min-width:200px}
+  select:focus,input:focus{outline:2px solid var(--brand);outline-offset:-1px}
+  select:disabled{opacity:.5;cursor:not-allowed}
+
+  /* ---------- KPI tiles ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:15px 16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi .lab{font-size:11.5px;color:var(--ink-2);font-weight:650;display:flex;align-items:center;gap:6px}
+  .kpi .val{font-size:24px;font-weight:780;margin-top:7px;letter-spacing:-.5px}
+  .kpi .sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .kpi .accent{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+  .delta{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:750;
+    padding:2px 7px;border-radius:20px;margin-top:8px}
+  .delta.up{color:var(--good);background:var(--good-bg)}
+  .delta.down{color:var(--bad);background:var(--bad-bg)}
+  .delta.flat{color:var(--muted);background:var(--surface-2)}
+
+  /* ---------- Cards / charts ---------- */
+  .grid{display:grid;gap:14px;margin-bottom:14px}
+  .g-2{grid-template-columns:1.55fr 1fr}
+  .g-1{grid-template-columns:1fr}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 18px;box-shadow:var(--shadow)}
+  .card h2{font-size:14px;margin:0 0 2px;font-weight:720}
+  .card .cap{font-size:11.5px;color:var(--muted);margin:0 0 12px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:11px;height:11px;border-radius:3px;display:inline-block}
+  .chartbox{position:relative;width:100%}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .tick{font-size:10.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
+  .axis-line{stroke:var(--axis);stroke-width:1}
+  .gridline{stroke:var(--grid);stroke-width:1}
+
+  /* funnel + mode bars */
+  .funnel{display:flex;flex-direction:column;gap:9px;margin-top:2px}
+  .fn-row{display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:10px}
+  .fn-lab{font-size:12px;font-weight:650;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+  .fn-track{height:24px;background:var(--surface-2);border-radius:7px;overflow:hidden;position:relative}
+  .fn-bar{height:100%;border-radius:7px;transition:width .5s cubic-bezier(.2,.7,.2,1);min-width:2px}
+  .fn-meta{font-size:12px;font-weight:750;font-variant-numeric:tabular-nums;text-align:right;min-width:88px}
+  .fn-meta small{color:var(--muted);font-weight:600}
+  .fn-meta.wide{min-width:150px}
+  .aging-note{margin-top:14px;font-size:12px;font-weight:650;border-radius:9px;padding:8px 11px;
+    display:flex;gap:8px;align-items:center;line-height:1.35}
+  .aging-note.warn{background:var(--warn-bg);color:var(--warn)}
+  .aging-note.ok{background:var(--good-bg);color:var(--good)}
+
+  /* ---------- Lifecycle flow map ---------- */
+  .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:6px}
+  .phase{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+    padding:12px 12px 7px;position:relative}
+  .phase:not(:last-child)::after{content:"➜";position:absolute;right:-16px;top:50%;
+    transform:translateY(-50%);color:var(--axis);font-size:14px;z-index:2}
+  .phase-head{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:750;margin-bottom:10px;flex-wrap:wrap}
+  .phase-head .pdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .phase-head small{color:var(--muted);font-weight:600;font-size:10.5px}
+  .step{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--axis);
+    border-radius:8px;padding:7px 9px;font-size:12px;font-weight:600;line-height:1.35}
+  .step small{display:block;color:var(--muted);font-weight:500;font-size:10.5px;margin-top:1px}
+  .step .who{display:inline-block;font-size:9.5px;font-weight:750;color:var(--ink-2);background:var(--surface-2);
+    border:1px solid var(--border);border-radius:5px;padding:1px 5px;margin-right:6px;text-transform:uppercase;letter-spacing:.3px;vertical-align:1px}
+  .phase[data-s="1"] .step{border-left-color:var(--stage-1)}
+  .phase[data-s="2"] .step{border-left-color:var(--stage-2)}
+  .phase[data-s="3"] .step{border-left-color:var(--stage-3)}
+  .phase[data-s="4"] .step{border-left-color:var(--stage-4)}
+  .sarr{text-align:center;color:var(--axis);font-size:11px;line-height:1;margin:3px 0}
+  .modes-inline{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+  .mode-pill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:14px;background:var(--good-bg);color:var(--good)}
+
+  /* aging chips */
+  .age{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:700;
+    padding:2px 8px;border-radius:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .age.ok{background:var(--surface-2);color:var(--ink-2)}
+  .age.warn{background:var(--warn-bg);color:var(--warn)}
+  .age.bad{background:var(--bad-bg);color:var(--bad)}
+  .age.done{background:var(--good-bg);color:var(--good)}
+
+  /* ---------- Table ---------- */
+  .tbl-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+    font-weight:700;padding:9px 10px;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
+  th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+  th:hover{color:var(--ink-2)}
+  td{padding:10px;border-bottom:1px solid var(--grid);white-space:nowrap}
+  tbody tr{cursor:pointer;transition:.12s}
+  tbody tr:hover{background:var(--surface-2)}
+  .site-name{font-weight:650}
+  .site-region{font-size:11px;color:var(--muted)}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+    padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .badge .dot{width:7px;height:7px;border-radius:50%}
+  .b-Submitted{background:rgba(137,182,239,.20);color:#1c5cab}
+  .b-Verified{background:rgba(57,135,229,.18);color:#1c5cab}
+  .b-Approved{background:var(--good-bg);color:var(--good)}
+  .b-Paid{background:var(--good-bg);color:var(--good)}
+  .b-Hold{background:var(--bad-bg);color:var(--bad)}
+  .b-None{background:var(--warn-bg);color:var(--warn)}
+  html[data-theme="dark"] .b-Submitted{color:#9ec5f4}
+  html[data-theme="dark"] .b-Verified{color:#9ec5f4}
+  .note-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--brand);font-weight:650;cursor:pointer}
+  .note-none{color:var(--muted);font-weight:500}
+
+  /* ---------- Modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(10,10,10,.55);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .overlay.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:18px;
+    box-shadow:var(--shadow);width:100%;max-width:640px;max-height:88vh;overflow:auto;padding:22px 24px}
+  .modal.wide{max-width:820px}
+  .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .modal-head h3{margin:0;font-size:18px;font-weight:760}
+  .modal-head p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+  .close{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;padding:2px 6px}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:16px}
+  .form-grid .full{grid-column:1/-1}
+  .form-grid label{font-size:11.5px;font-weight:700;color:var(--ink-2);display:block;margin-bottom:5px}
+  .form-grid select,.form-grid input{width:100%}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .note-preview{margin-top:8px;border:1px dashed var(--border);border-radius:10px;padding:8px;
+    display:none;text-align:center;background:var(--surface-2)}
+  .note-preview img{max-width:100%;max-height:200px;border-radius:6px}
+
+  .mini-table{width:100%;font-size:12.5px;margin-top:6px}
+  .mini-table td{padding:7px 8px}
+  .drill-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+  .drill-kpis .dk{background:var(--surface-2);border-radius:11px;padding:11px 13px}
+  .drill-kpis .dk .l{font-size:11px;color:var(--muted);font-weight:650}
+  .drill-kpis .dk .v{font-size:18px;font-weight:750;margin-top:3px}
+
+  /* tooltip */
+  #tip{position:fixed;pointer-events:none;z-index:80;background:var(--ink);color:var(--plane);
+    padding:8px 11px;border-radius:9px;font-size:12px;box-shadow:0 6px 20px rgba(0,0,0,.3);
+    opacity:0;transition:opacity .1s;max-width:240px}
+  #tip .tt{font-weight:750;margin-bottom:4px}
+  #tip .tr{display:flex;justify-content:space-between;gap:16px}
+  #tip .tr span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:var(--plane);padding:12px 20px;border-radius:11px;font-size:13px;font-weight:600;
+    box-shadow:0 10px 30px rgba(0,0,0,.3);opacity:0;transition:.3s;z-index:90;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .foot{margin-top:22px;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.7}
+
+  @media(max-width:960px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .g-2{grid-template-columns:1fr}
+    .form-grid{grid-template-columns:1fr}
+    .flow{grid-template-columns:1fr 1fr}
+    .phase::after{display:none!important}
+  }
+  @media(max-width:640px){
+    .flow{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Login screen ─────────────────────────────────────────────────────────── -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">WV</div>
+    <h2>WeVois Billing</h2>
+    <p class="sub">Dashboard — sign in to continue</p>
+    <div class="login-err" id="loginErr"></div>
+    <div class="login-field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="admin@wevois.com" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label for="loginPass">Password</label>
+      <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="loginBtn">Sign in →</button>
+    <p class="login-hint">Demo: admin@wevois.com / admin123</p>
+  </div>
+</div>
+
+<!-- ── Loading overlay ───────────────────────────────────────────────────────── -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div> Loading billing data…
+</div>
+
+<div class="wrap">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">WV</div>
+      <div>
+        <h1>WeVois — Billing Dashboard</h1>
+        <p>Month-on-month billing, penalties &amp; approval-stage tracking across 37 sites</p>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="user-badge" id="userBadge" style="display:none">
+      <span>👤</span><strong id="userBadgeName"></strong>
+    </div>
+    <button class="btn primary" id="addBtn">＋ Add / Update Bill</button>
+    <button class="btn" id="logoutBtn" style="display:none">Sign out</button>
+    <button class="btn icon-btn" id="themeBtn" title="Toggle light / dark">🌙</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="field">
+      <label for="monthSel">Billing month</label>
+      <select id="monthSel"></select>
+    </div>
+    <div class="field">
+      <label for="regionSel">Region</label>
+      <select id="regionSel"><option value="all">All regions</option></select>
+    </div>
+    <div class="field">
+      <label for="statusSel">Stage / status</label>
+      <select id="statusSel">
+        <option value="all">All stages</option>
+        <option>Submitted</option><option>Verified</option>
+        <option>Approved</option><option>Paid</option>
+        <option value="On Hold">On Hold</option>
+        <option value="Not reported">Not reported</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="searchBox">Search site</label>
+      <input type="text" id="searchBox" placeholder="Type a site name…">
+    </div>
+  </div>
+
+  <!-- KPI tiles -->
+  <div class="kpis" id="kpis"></div>
+
+  <!-- Charts row 1 -->
+  <div class="grid g-2">
+    <div class="card">
+      <h2>Month-on-month — Billed vs Net payable</h2>
+      <p class="cap">Total across selected region · last 12 months · hover for detail</p>
+      <div class="chartbox" id="trendChart"></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--billed)"></i> Gross billed</span>
+        <span><i class="swatch" style="background:var(--net)"></i> Net payable</span>
+        <span><i class="swatch" style="background:var(--penalty)"></i> Penalty (gap)</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Approval stage — <span id="funnelMonth"></span></h2>
+      <p class="cap">Where each site's bill sits in the workflow · full ground process mapped below</p>
+      <div class="funnel" id="funnel"></div>
+      <div class="aging-note ok" id="agingNote"></div>
+    </div>
+  </div>
+
+  <!-- Lifecycle flow map -->
+  <div class="grid g-1">
+    <div class="card">
+      <h2>Bill lifecycle — ground process</h2>
+      <p class="cap">The full department workflow behind the four tracked stages · digitised from the process notesheet</p>
+      <div class="flow">
+        <div class="phase" data-s="1">
+          <div class="phase-head"><span class="pdot" style="background:var(--stage-1)"></span>Submission <small>· tracked as "Submitted"</small></div>
+          <div class="step"><span class="who">Accounts</span>Monthly bill prepared<small>by the 30th of the month</small></div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">Ravi</span>Cover letter<small>30th of the month</small></div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">Accounts</span>Submitted to CTO<small>next working day · receiving captured on WhatsApp</small></div>
+        </div>
+        <div class="phase" data-s="2">
+          <div class="phase-head"><span class="pdot" style="background:var(--stage-2)"></span>Verification <small>· tracked as "Verified"</small></div>
+          <div class="step"><span class="who">Dept.</span>Received in department</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">LDC</span>Bill put on file</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">SI</span>Verification of the bill</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">OIC</span>SBM Head verifies</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">Dept.</span>Penalties assessed<small>deductions applied to the bill</small></div>
+        </div>
+        <div class="phase" data-s="3">
+          <div class="phase-head"><span class="pdot" style="background:var(--stage-3)"></span>Approval <small>· tracked as "Approved"</small></div>
+          <div class="step"><span class="who">Accounts</span>Pre-check<small>before EO approval</small></div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">EO</span>Approval</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">Accounts</span>Payment advice letter ready</div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">CMC / EO</span>Final approval<small>advice copies A1 · A2 · A3</small></div>
+        </div>
+        <div class="phase" data-s="4">
+          <div class="phase-head"><span class="pdot" style="background:var(--stage-4)"></span>Payment <small>· tracked as "Paid"</small></div>
+          <div class="step"><span class="who">Cash branch</span>Payment released<small>settlement mode:</small>
+            <div class="modes-inline">
+              <span class="mode-pill">Treasury</span><span class="mode-pill">Self</span>
+              <span class="mode-pill">PFMS</span><span class="mode-pill">Cheque</span>
+            </div>
+          </div>
+          <div class="sarr">↓</div>
+          <div class="step"><span class="who">WeVois</span>Payment received ✓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="grid g-2">
+    <div class="card">
+      <h2>Penalties month-on-month</h2>
+      <p class="cap">Total deductions across selected region · hover a bar for the month total</p>
+      <div class="chartbox" id="penaltyChart"></div>
+    </div>
+    <div class="card">
+      <h2>Payment mode — <span id="modeMonth"></span></h2>
+      <p class="cap">How paid bills were settled by the cash branch</p>
+      <div class="funnel" id="modeBars"></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card">
+    <div class="tbl-head">
+      <div>
+        <h2>Site-wise billing — <span id="tblMonth"></span></h2>
+        <p class="cap" style="margin:0" id="tblCount"></p>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="siteTable">
+        <thead>
+          <tr>
+            <th data-sort="name">Site ▾</th>
+            <th data-sort="region">Region</th>
+            <th data-sort="billed" class="num">Gross billed</th>
+            <th data-sort="penalty" class="num">Penalty</th>
+            <th data-sort="net" class="num">Net payable</th>
+            <th data-sort="status">Stage</th>
+            <th data-sort="age">Days</th>
+            <th data-sort="note">Notesheet</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="foot">
+    Live data from local SQLite backend · <a href="/wevois-billing-executive-app.html" style="color:var(--brand)">Open Executive App →</a>
+  </div>
+</div>
+
+<!-- Drill-down modal -->
+<div class="overlay" id="drillOverlay">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div>
+        <h3 id="drillTitle"></h3>
+        <p id="drillSub"></p>
+      </div>
+      <button class="close" data-close>×</button>
+    </div>
+    <div class="drill-kpis" id="drillKpis"></div>
+    <div class="chartbox" id="drillChart"></div>
+    <div class="legend" style="margin-bottom:6px">
+      <span><i class="swatch" style="background:var(--billed)"></i> Gross billed</span>
+      <span><i class="swatch" style="background:var(--net)"></i> Net payable</span>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="mini-table" id="drillTable"></table>
+    </div>
+  </div>
+</div>
+
+<!-- Data entry modal -->
+<div class="overlay" id="formOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3>Add / update a bill</h3>
+        <p>Enter monthly figures &amp; attach the signed notesheet.</p>
+      </div>
+      <button class="close" data-close>×</button>
+    </div>
+    <div class="form-grid">
+      <div>
+        <label for="fSite">Site</label>
+        <select id="fSite"></select>
+      </div>
+      <div>
+        <label for="fMonth">Month</label>
+        <select id="fMonth"></select>
+      </div>
+      <div>
+        <label for="fBilled">Gross billed (₹)</label>
+        <input type="number" id="fBilled" min="0" step="1000" placeholder="e.g. 2450000">
+      </div>
+      <div>
+        <label for="fPenalty">Penalty / deduction (₹)</label>
+        <input type="number" id="fPenalty" min="0" step="1000" placeholder="e.g. 85000">
+      </div>
+      <div>
+        <label for="fStatus">Approval stage</label>
+        <select id="fStatus">
+          <option>Submitted</option><option>Verified</option>
+          <option>Approved</option><option>Paid</option>
+          <option value="On Hold">On Hold</option>
+        </select>
+      </div>
+      <div>
+        <label for="fDate">Date reached this stage</label>
+        <input type="date" id="fDate">
+      </div>
+      <div>
+        <label for="fMode">Payment mode</label>
+        <select id="fMode">
+          <option>Treasury</option><option>Self</option>
+          <option>PFMS</option><option>Cheque</option>
+        </select>
+        <p class="hint" id="fModeHint">Enabled when stage is Paid.</p>
+      </div>
+      <div>
+        <label for="fNet">Net payable (auto)</label>
+        <input type="text" id="fNet" readonly>
+      </div>
+      <div class="full">
+        <label for="fNote">Signed notesheet / letter (image)</label>
+        <input type="file" id="fNote" accept="image/*">
+        <p class="hint">Attach a photo of the final signed notesheet.</p>
+        <div class="note-preview" id="notePreview"><img id="notePreviewImg" alt="notesheet preview"></div>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" id="saveBtn">Save bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notesheet viewer -->
+<div class="overlay" id="noteOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div><h3 id="noteTitle">Signed notesheet</h3><p id="noteSub"></p></div>
+      <button class="close" data-close>×</button>
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <img id="noteImg" style="max-width:100%;border-radius:10px;border:1px solid var(--border)" alt="notesheet">
+    </div>
+  </div>
+</div>
+
+<div id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   WeVois Billing Dashboard — API-connected version
+   ============================================================ */
+
+/* ---- Months ---- */
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function buildMonths() {
+  const now = new Date(); const arr = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    arr.push({
+      key:   `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+      label: `${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`,
+      short: `${MONTH_NAMES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+    });
+  }
+  return arr;
+}
+const MONTHS = buildMonths();
+const STAGES = ['Submitted','Verified','Approved','Paid'];
+const MODES  = ['Treasury','Self','PFMS','Cheque'];
+const DAY = 86400000, HOUR = 3600000;
+const NOW = Date.now();
+
+/* ---- API client ---- */
+let currentUser = null;
+let sites       = [];
+let records     = {};
+
+function getToken()    { return localStorage.getItem('wv_token'); }
+function setToken(t)   { localStorage.setItem('wv_token', t); }
+function clearToken()  { localStorage.removeItem('wv_token'); }
+
+async function apiFetch(method, url, body) {
+  const opts = { method, headers: {} };
+  const token = getToken();
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if (body)  { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const res = await fetch(API_BASE + url, opts);
+  if (res.status === 401) { clearToken(); showLoginScreen(); return null; }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+
+/* ---- Transform API bill → frontend record format ---- */
+function transformBill(b) {
+  if (!b) return { reported: false };
+  const dates = {};
+  if (b.submitted_at) dates.Submitted = new Date(b.submitted_at).getTime();
+  if (b.verified_at)  dates.Verified  = new Date(b.verified_at).getTime();
+  if (b.approved_at)  dates.Approved  = new Date(b.approved_at).getTime();
+  if (b.paid_at)      dates.Paid      = new Date(b.paid_at).getTime();
+  return {
+    reported:  true,
+    billed:    b.billed,
+    penalty:   b.penalty,
+    net:       b.net,
+    status:    b.status,
+    dates,
+    holdSince: b.hold_since ? new Date(b.hold_since).getTime() : null,
+    mode:      b.payment_mode,
+    note:      b.notesheet_url || null,
+    remark:    b.remark || null
+  };
+}
+
+/* ---- Load all data from API ---- */
+async function loadData() {
+  const [sitesData, billsData] = await Promise.all([
+    apiFetch('GET', '/api/sites'),
+    apiFetch('GET', '/api/bills?last_months=12')
+  ]);
+  if (!sitesData || !billsData) return;
+
+  sites   = sitesData.map(s => ({ id: s.id, name: s.name, region: s.region, base: 0 }));
+  records = {};
+  sites.forEach(s => {
+    records[s.id] = {};
+    MONTHS.forEach(m => { records[s.id][m.key] = { reported: false }; });
+  });
+  billsData.forEach(b => {
+    if (!records[b.site_id]) records[b.site_id] = {};
+    records[b.site_id][b.month_key] = transformBill(b);
+  });
+}
+
+/* ---- Auth UI ---- */
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loadingOverlay').classList.remove('active');
+  document.getElementById('userBadge').style.display  = 'none';
+  document.getElementById('logoutBtn').style.display  = 'none';
+}
+function hideLoginScreen() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('userBadge').style.display  = '';
+  document.getElementById('logoutBtn').style.display  = '';
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  if (!email || !pass) { errEl.textContent = 'Enter email and password'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  try {
+    const res = await fetch(API_BASE + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Login failed'; errEl.style.display = 'block'; return; }
+
+    setToken(data.token);
+    currentUser = data.user;
+    document.getElementById('userBadgeName').textContent = `${data.user.fullName} (${data.user.role})`;
+    document.getElementById('loadingOverlay').classList.add('active');
+    hideLoginScreen();
+    await loadData();
+    document.getElementById('loadingOverlay').classList.remove('active');
+    initControls(); fillFormSelectors(); renderAll();
+  } catch {
+    errEl.textContent = 'Cannot reach server — is npm start running?';
+    errEl.style.display = 'block';
+  } finally {
+    btn.textContent = 'Sign in →'; btn.disabled = false;
+  }
+}
+
+async function initApp() {
+  const token = getToken();
+  if (!token) { showLoginScreen(); return; }
+
+  document.getElementById('loadingOverlay').classList.add('active');
+  try {
+    const user = await apiFetch('GET', '/api/auth/me');
+    if (!user) return;
+    currentUser = user;
+    document.getElementById('userBadgeName').textContent = `${user.fullName} (${user.role})`;
+    await loadData();
+    document.getElementById('loadingOverlay').classList.remove('active');
+    hideLoginScreen();
+    initControls(); fillFormSelectors(); renderAll();
+  } catch {
+    document.getElementById('loadingOverlay').classList.remove('active');
+    showLoginScreen();
+  }
+}
+
+/* ============================================================
+   Formatting helpers
+   ============================================================ */
+const inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
+function rupees(v) { return '₹' + inr.format(Math.round(v)); }
+function short(v) {
+  const a = Math.abs(v);
+  if (a >= 1e7) return '₹' + (v/1e7).toFixed(2) + ' Cr';
+  if (a >= 1e5) return '₹' + (v/1e5).toFixed(2) + ' L';
+  return '₹' + inr.format(Math.round(v));
+}
+function pct(v) { return (v*100).toFixed(1) + '%'; }
+function fmtD(ms) { const d = new Date(ms); return d.getDate() + ' ' + MONTH_NAMES[d.getMonth()]; }
+
+/* ---- aging helpers ---- */
+function lastStageDate(rec) {
+  if (!rec || !rec.reported) return null;
+  let last = null;
+  if (rec.dates) STAGES.forEach(k => { if (rec.dates[k] != null && (last == null || rec.dates[k] > last)) last = rec.dates[k]; });
+  if (rec.holdSince && (last == null || rec.holdSince > last)) last = rec.holdSince;
+  return last;
+}
+function ageDays(rec) { const d = lastStageDate(rec); if (d == null) return null; return Math.max(0, Math.floor((Date.now()-d)/DAY)); }
+function cycleDays(rec) {
+  if (!rec || !rec.dates || rec.dates.Paid == null || rec.dates.Submitted == null) return null;
+  return Math.max(0, Math.round((rec.dates.Paid - rec.dates.Submitted) / DAY));
+}
+function ageSortVal(rec) {
+  if (!rec || !rec.reported) return -1;
+  if (rec.status === 'Paid') { const c = cycleDays(rec); return c == null ? -1 : c; }
+  const a = ageDays(rec); return a == null ? -1 : a;
+}
+function ageCell(rec) {
+  if (!rec || !rec.reported) return '<span class="note-none">—</span>';
+  if (rec.status === 'Paid') {
+    const c = cycleDays(rec);
+    return `<span class="age done" title="Full cycle, submitted → paid">${c != null ? c+'d cycle' : '✓ paid'}</span>`;
+  }
+  const a = ageDays(rec);
+  if (a == null) return '<span class="note-none">—</span>';
+  const cls = a > 14 ? 'bad' : (a > 7 ? 'warn' : 'ok');
+  return `<span class="age ${cls}" title="Days since the bill reached its current stage">${a}d at stage</span>`;
+}
+function dateTitle(rec) {
+  if (!rec || !rec.reported || !rec.dates) return '';
+  const parts = STAGES.filter(k => rec.dates[k] != null).map(k => k + ': ' + fmtD(rec.dates[k]));
+  if (rec.holdSince) parts.push('On hold since: ' + fmtD(rec.holdSince));
+  return parts.join('  ·  ');
+}
+
+/* ============================================================
+   State
+   ============================================================ */
+const state = { month: MONTHS[MONTHS.length-1].key, region: 'all', status: 'all', search: '', sort: 'net', dir: -1 };
+
+function monthTotals(monthKey, region) {
+  let billed=0, penalty=0, net=0, paidNet=0, reported=0, total=0, stuck=0;
+  const stageCount = { Submitted:0, Verified:0, Approved:0, Paid:0, 'On Hold':0 };
+  const stageAmt   = { Submitted:0, Verified:0, Approved:0, Paid:0, 'On Hold':0 };
+  const modeAmt    = { Treasury:0, Self:0, PFMS:0, Cheque:0 };
+  const modeCount  = { Treasury:0, Self:0, PFMS:0, Cheque:0 };
+  sites.forEach(s => {
+    if (region !== 'all' && s.region !== region) return;
+    total++;
+    const rec = records[s.id]?.[monthKey];
+    if (!rec || !rec.reported) return;
+    reported++; billed += rec.billed; penalty += rec.penalty; net += rec.net;
+    stageCount[rec.status]++; stageAmt[rec.status] += rec.net;
+    if (rec.status === 'Paid') {
+      paidNet += rec.net;
+      if (rec.mode) { modeAmt[rec.mode] += rec.net; modeCount[rec.mode]++; }
+    } else {
+      const a = ageDays(rec); if (a != null && a > 7) stuck++;
+    }
+  });
+  return { billed, penalty, net, paidNet, reported, total, stuck, stageCount, stageAmt, modeAmt, modeCount };
+}
+
+/* ============================================================
+   KPI render
+   ============================================================ */
+function prevMonthKey(mk) { const i = MONTHS.findIndex(m => m.key === mk); return i > 0 ? MONTHS[i-1].key : null; }
+function deltaHtml(cur, prev, goodUp=true) {
+  if (prev === 0 || prev == null) return `<div class="delta flat">— no prior</div>`;
+  const d = (cur-prev)/Math.abs(prev);
+  if (Math.abs(d) < 0.0005) return `<div class="delta flat">0.0% vs prev</div>`;
+  const up = d > 0; const good = (up === goodUp);
+  return `<div class="delta ${good?'up':'down'}">${up?'▲':'▼'} ${Math.abs(d*100).toFixed(1)}% vs prev</div>`;
+}
+function renderKpis() {
+  const t  = monthTotals(state.month, state.region);
+  const pk = prevMonthKey(state.month);
+  const p  = pk ? monthTotals(pk, state.region) : null;
+  const penRate = t.billed ? t.penalty/t.billed : 0;
+  const colRate = t.net    ? t.paidNet/t.net     : 0;
+  const tiles = [
+    { lab:'Gross billed',    val:short(t.billed),  sub:MONTHS.find(m=>m.key===state.month).label, accent:'var(--billed)', delta:deltaHtml(t.billed,p?.billed,true) },
+    { lab:'Penalties',       val:short(t.penalty), sub:pct(penRate)+' of gross',                  accent:'var(--penalty)',delta:deltaHtml(t.penalty,p?.penalty,false) },
+    { lab:'Net payable',     val:short(t.net),     sub:'after deductions',                         accent:'var(--net)',   delta:deltaHtml(t.net,p?.net,true) },
+    { lab:'Collected (Paid)',val:short(t.paidNet), sub:pct(colRate)+' of net cleared',             accent:'var(--good)', delta:deltaHtml(colRate,p?(p.net?p.paidNet/p.net:0):null,true) },
+    { lab:'Sites reported',  val:t.reported+' / '+t.total, sub:(t.total-t.reported)+' pending entry', accent:'var(--stage-2)',
+      delta:`<div class="delta ${t.reported===t.total?'up':'flat'}">${pct(t.total?t.reported/t.total:0)} in</div>` }
+  ];
+  document.getElementById('kpis').innerHTML = tiles.map(k =>
+    `<div class="kpi"><div class="accent" style="background:${k.accent}"></div>
+       <div class="lab">${k.lab}</div>
+       <div class="val">${k.val}</div>
+       <div class="sub">${k.sub}</div>
+       ${k.delta}
+     </div>`
+  ).join('');
+}
+
+/* ============================================================
+   Line chart
+   ============================================================ */
+function seriesForRegion(region) {
+  const billed=[], net=[], penalty=[];
+  MONTHS.forEach(m => { const t = monthTotals(m.key, region); billed.push(t.billed); net.push(t.net); penalty.push(t.penalty); });
+  return { billed, net, penalty };
+}
+function niceMax(v) {
+  if (v <= 0) return 100000;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const n = v/pow;
+  const step = n<=1?1:n<=2?2:n<=5?5:10;
+  return step*pow;
+}
+function lineChart(elId, months, series) {
+  const W=760,H=300,pl=64,pr=18,pt=16,pb=34;
+  const iw=W-pl-pr, ih=H-pt-pb;
+  const maxV = niceMax(Math.max(...series.flatMap(s=>s.values),1)*1.08);
+  const x = i => pl + (months.length===1 ? iw/2 : iw*i/(months.length-1));
+  const y = v => pt + ih - (v/maxV)*ih;
+  const gl=5; let g='';
+  for (let i=0;i<=gl;i++) {
+    const val=maxV*i/gl, yy=y(val);
+    g += `<line class="gridline" x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}"/>`;
+    g += `<text class="tick" x="${pl-8}" y="${yy+3}" text-anchor="end">${short(val).replace('₹','')}</text>`;
+  }
+  let xl='';
+  months.forEach((m,i) => { if (months.length>12&&i%2) return; xl += `<text class="tick" x="${x(i)}" y="${H-12}" text-anchor="middle">${m.short}</text>`; });
+  let paths='';
+  series.forEach(s => {
+    const dLine = s.values.map((v,i) => (i?'L':'M')+x(i)+' '+y(v)).join(' ');
+    if (s.fill) paths += `<path d="${dLine} L${x(months.length-1)} ${y(0)} L${x(0)} ${y(0)} Z" fill="${s.color}" opacity="0.08"/>`;
+    paths += `<path d="${dLine}" fill="none" stroke="${s.color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+    paths += s.values.map((v,i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3.4" fill="var(--surface)" stroke="${s.color}" stroke-width="2"/>`).join('');
+  });
+  let hits='';
+  months.forEach((m,i) => {
+    const cx=x(i), bw=iw/months.length;
+    hits += `<rect x="${cx-bw/2}" y="${pt}" width="${bw}" height="${ih}" fill="transparent" data-i="${i}" class="hitcol" style="cursor:crosshair"/>`;
+  });
+  const crossX = `<line id="cross_${elId}" x1="0" y1="${pt}" x2="0" y2="${pt+ih}" stroke="var(--axis)" stroke-dasharray="3 3" style="opacity:0"/>`;
+  document.getElementById(elId).innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" data-w="${W}" data-max="${maxV}">${g}${crossX}${paths}${xl}
+     <line class="axis-line" x1="${pl}" y1="${pt+ih}" x2="${W-pr}" y2="${pt+ih}"/>${hits}</svg>`;
+  attachLineHover(elId, months, series, {x,y,pt,ih});
+}
+function attachLineHover(elId, months, series, geo) {
+  const el=document.getElementById(elId); const svg=el.querySelector('svg');
+  const cross=svg.querySelector('#cross_'+elId);
+  svg.querySelectorAll('.hitcol').forEach(h => {
+    h.addEventListener('mousemove', ev => {
+      const i=+h.dataset.i, m=months[i];
+      cross.style.opacity=1; cross.setAttribute('x1',geo.x(i)); cross.setAttribute('x2',geo.x(i));
+      let rows = series.map(s => `<div class="tr"><span><i class="swatch" style="background:${s.color}"></i>${s.name}</span><span>${short(s.values[i])}</span></div>`).join('');
+      if (series.length>=2) { const gap=series[0].values[i]-series[1].values[i]; rows += `<div class="tr"><span>Penalty</span><span>${short(gap)}</span></div>`; }
+      showTip(ev, `<div class="tt">${m.label}</div>${rows}`);
+    });
+    h.addEventListener('mouseleave', () => { cross.style.opacity=0; hideTip(); });
+  });
+}
+
+/* ============================================================
+   Bar chart (penalties)
+   ============================================================ */
+function barChart(elId, months, values, color) {
+  const W=760,H=250,pl=64,pr=16,pt=14,pb=32;
+  const iw=W-pl-pr, ih=H-pt-pb;
+  const maxV=niceMax(Math.max(...values,1)*1.12);
+  const y=v=>pt+ih-(v/maxV)*ih; const bw=iw/months.length;
+  const gl=4; let g='';
+  for (let i=0;i<=gl;i++) {
+    const val=maxV*i/gl, yy=y(val);
+    g += `<line class="gridline" x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}"/>`;
+    g += `<text class="tick" x="${pl-8}" y="${yy+3}" text-anchor="end">${short(val).replace('₹','')}</text>`;
+  }
+  let bars='';
+  values.forEach((v,i) => {
+    const bh=(v/maxV)*ih, bx=pl+bw*i+bw*0.16, w=bw*0.68, by=pt+ih-bh;
+    bars += `<rect x="${bx}" y="${by}" width="${w}" height="${Math.max(bh,1)}" rx="4" fill="${color}" data-i="${i}" class="barhit" style="cursor:pointer"/>`;
+    bars += `<text class="tick" x="${bx+w/2}" y="${H-12}" text-anchor="middle">${months[i].short}</text>`;
+  });
+  document.getElementById(elId).innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}">${g}${bars}<line class="axis-line" x1="${pl}" y1="${pt+ih}" x2="${W-pr}" y2="${pt+ih}"/></svg>`;
+  document.getElementById(elId).querySelectorAll('.barhit').forEach(b => {
+    b.addEventListener('mousemove', ev => { const i=+b.dataset.i; b.setAttribute('opacity','0.8'); showTip(ev, `<div class="tt">${months[i].label}</div><div class="tr"><span>Penalties</span><span>${short(values[i])}</span></div>`); });
+    b.addEventListener('mouseleave', () => { b.setAttribute('opacity','1'); hideTip(); });
+  });
+}
+
+/* ============================================================
+   Approval-stage funnel + aging note
+   ============================================================ */
+function renderFunnel() {
+  const t = monthTotals(state.month, state.region);
+  document.getElementById('funnelMonth').textContent = MONTHS.find(m=>m.key===state.month).label;
+  const order = [['Submitted','var(--stage-1)'],['Verified','var(--stage-2)'],['Approved','var(--stage-3)'],['Paid','var(--stage-4)'],['On Hold','var(--stage-hold)']];
+  const max = Math.max(1, ...order.map(o=>t.stageCount[o[0]]));
+  const icons = { Submitted:'📝', Verified:'🔍', Approved:'✔️', Paid:'💰', 'On Hold':'⚠️' };
+  document.getElementById('funnel').innerHTML = order.map(([name,col]) => {
+    const c=t.stageCount[name], amt=t.stageAmt[name];
+    return `<div class="fn-row">
+      <div class="fn-lab">${icons[name]} ${name}</div>
+      <div class="fn-track"><div class="fn-bar" style="width:${(c/max*100).toFixed(1)}%;background:${col}"></div></div>
+      <div class="fn-meta">${c} site${c===1?'':'s'} <small>· ${short(amt)}</small></div>
+    </div>`;
+  }).join('');
+  const note = document.getElementById('agingNote');
+  if (t.stuck > 0) {
+    note.className='aging-note warn';
+    note.innerHTML=`⚠️&nbsp; <span>${t.stuck} unpaid bill${t.stuck===1?'':'s'} waiting <b>more than 7 days</b> at the current stage — see the "Days" column below.</span>`;
+  } else {
+    note.className='aging-note ok';
+    note.innerHTML=`✓&nbsp; <span>No unpaid bill has been stuck at a stage for more than 7 days.</span>`;
+  }
+}
+
+/* ============================================================
+   Payment-mode breakdown
+   ============================================================ */
+function renderModes() {
+  const t = monthTotals(state.month, state.region);
+  document.getElementById('modeMonth').textContent = MONTHS.find(m=>m.key===state.month).label;
+  const el = document.getElementById('modeBars');
+  const totalPaid = MODES.reduce((s,m) => s+t.modeAmt[m], 0);
+  if (totalPaid <= 0) { el.innerHTML = `<p class="cap" style="margin:6px 0">No bills marked Paid yet for this month.</p>`; return; }
+  const max = Math.max(1, ...MODES.map(m=>t.modeAmt[m]));
+  el.innerHTML = MODES.map(m => {
+    const amt=t.modeAmt[m], c=t.modeCount[m], shr=amt/totalPaid;
+    return `<div class="fn-row">
+      <div class="fn-lab">${m}</div>
+      <div class="fn-track modehit" data-mode="${m}"><div class="fn-bar" style="width:${(amt/max*100).toFixed(1)}%;background:var(--net)"></div></div>
+      <div class="fn-meta wide">${short(amt)} <small>· ${c} bill${c===1?'':'s'} · ${pct(shr)}</small></div>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.modehit').forEach(tr => {
+    tr.addEventListener('mousemove', ev => {
+      const m=tr.dataset.mode;
+      showTip(ev, `<div class="tt">${m}</div>
+        <div class="tr"><span>Amount</span><span>${short(t.modeAmt[m])}</span></div>
+        <div class="tr"><span>Bills</span><span>${t.modeCount[m]}</span></div>
+        <div class="tr"><span>Share of paid</span><span>${pct(t.modeAmt[m]/totalPaid)}</span></div>`);
+    });
+    tr.addEventListener('mouseleave', hideTip);
+  });
+}
+
+/* ============================================================
+   Site table
+   ============================================================ */
+function statusBadge(status) {
+  if (!status) return `<span class="badge b-None"><span class="dot" style="background:var(--warn)"></span>Not reported</span>`;
+  const map = { Submitted:'var(--stage-1)', Verified:'var(--stage-2)', Approved:'var(--stage-3)', Paid:'var(--stage-4)', 'On Hold':'var(--stage-hold)' };
+  const cls = status==='On Hold' ? 'b-Hold' : ('b-'+status);
+  return `<span class="badge ${cls}"><span class="dot" style="background:${map[status]}"></span>${status}</span>`;
+}
+function renderTable() {
+  const mk = state.month;
+  document.getElementById('tblMonth').textContent = MONTHS.find(m=>m.key===mk).label;
+  let rows = sites.map(s => {
+    const rec = records[s.id]?.[mk] || { reported: false };
+    return { id:s.id, name:s.name, region:s.region, rec,
+      billed:rec.reported?rec.billed:null, penalty:rec.reported?rec.penalty:null,
+      net:rec.reported?rec.net:null, status:rec.reported?rec.status:null,
+      mode:rec.reported?rec.mode:null, age:ageSortVal(rec), note:rec.reported?rec.note:null };
+  });
+  if (state.region!=='all') rows=rows.filter(r=>r.region===state.region);
+  if (state.status!=='all') {
+    if (state.status==='Not reported') rows=rows.filter(r=>r.status===null);
+    else rows=rows.filter(r=>r.status===state.status);
+  }
+  if (state.search) rows=rows.filter(r=>r.name.toLowerCase().includes(state.search.toLowerCase()));
+  const dir=state.dir, key=state.sort;
+  rows.sort((a,b) => {
+    let av=a[key], bv=b[key];
+    if (key==='note') { av=a.note?1:0; bv=b.note?1:0; }
+    if (av==null) av = key==='name'||key==='region'||key==='status'?'':-1;
+    if (bv==null) bv = key==='name'||key==='region'||key==='status'?'':-1;
+    if (typeof av==='string') return av.localeCompare(bv)*dir;
+    return (av-bv)*dir;
+  });
+  const reported = rows.filter(r=>r.status!==null).length;
+  document.getElementById('tblCount').textContent = `${rows.length} sites shown · ${reported} reported`;
+  document.getElementById('tblBody').innerHTML = rows.map(r => `
+    <tr data-site="${r.id}">
+      <td><div class="site-name">${r.name}</div></td>
+      <td><span class="site-region">${r.region}</span></td>
+      <td class="num">${r.billed!=null?rupees(r.billed):'—'}</td>
+      <td class="num" style="color:${r.penalty?'var(--penalty)':'inherit'}">${r.penalty!=null?(r.penalty?'−'+rupees(r.penalty):'₹0'):'—'}</td>
+      <td class="num" style="font-weight:650">${r.net!=null?rupees(r.net):'—'}</td>
+      <td title="${dateTitle(r.rec)}">${statusBadge(r.status)}${r.status==='Paid'&&r.mode?`<div class="site-region" style="margin-top:2px">via ${r.mode}</div>`:''}</td>
+      <td>${ageCell(r.rec)}</td>
+      <td>${r.note?`<span class="note-chip" data-note="${r.id}">📎 View</span>`:(r.status?'<span class="note-none">— none</span>':'<span class="note-none">—</span>')}</td>
+    </tr>`
+  ).join('');
+  document.querySelectorAll('#tblBody tr').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.closest('.note-chip')) { openNote(+e.target.closest('.note-chip').dataset.note); return; }
+      openDrill(+tr.dataset.site);
+    });
+  });
+}
+
+/* ============================================================
+   Drill-down — loads site history from API
+   ============================================================ */
+async function openDrill(siteId) {
+  const s = sites.find(x => x.id === siteId);
+  document.getElementById('drillTitle').textContent = s.name;
+  document.getElementById('drillSub').textContent   = s.region + ' · 12-month billing history';
+
+  // Fetch fresh 12-month history for this site
+  const billsData = await apiFetch('GET', `/api/bills/${siteId}`);
+  const siteRecs  = {};
+  MONTHS.forEach(m => { siteRecs[m.key] = { reported: false }; });
+  if (billsData) billsData.forEach(b => { siteRecs[b.month_key] = transformBill(b); });
+
+  const billed=[], net=[]; let totBilled=0, totPen=0, totNet=0;
+  MONTHS.forEach(m => {
+    const r = siteRecs[m.key];
+    billed.push(r?.reported?r.billed:0); net.push(r?.reported?r.net:0);
+    if (r?.reported) { totBilled+=r.billed; totPen+=r.penalty; totNet+=r.net; }
+  });
+  document.getElementById('drillKpis').innerHTML = `
+    <div class="dk"><div class="l">12-mo gross billed</div><div class="v">${short(totBilled)}</div></div>
+    <div class="dk"><div class="l">12-mo penalties</div><div class="v" style="color:var(--penalty)">${short(totPen)}</div></div>
+    <div class="dk"><div class="l">12-mo net payable</div><div class="v">${short(totNet)}</div></div>`;
+  lineChart('drillChart', MONTHS, [
+    { name:'Gross billed', color:'var(--billed)', values:billed, fill:true },
+    { name:'Net payable',  color:'var(--net)',    values:net }
+  ]);
+  document.getElementById('drillTable').innerHTML =
+    `<thead><tr><th>Month</th><th class="num">Billed</th><th class="num">Penalty</th><th class="num">Net</th><th>Stage</th><th>Days</th><th>Notesheet</th></tr></thead><tbody>` +
+    MONTHS.slice().reverse().map(m => {
+      const r = siteRecs[m.key] || { reported: false };
+      return `<tr><td>${m.label}</td>
+        <td class="num">${r.reported?rupees(r.billed):'—'}</td>
+        <td class="num" style="color:${r.reported&&r.penalty?'var(--penalty)':'inherit'}">${r.reported?(r.penalty?'−'+rupees(r.penalty):'₹0'):'—'}</td>
+        <td class="num">${r.reported?rupees(r.net):'—'}</td>
+        <td title="${dateTitle(r)}">${statusBadge(r.reported?r.status:null)}${r.reported&&r.status==='Paid'&&r.mode?`<div class="site-region" style="margin-top:2px">via ${r.mode}</div>`:''}</td>
+        <td>${ageCell(r)}</td>
+        <td>${r.reported&&r.note?`<span class="note-chip" data-note2="${siteId}" data-mk="${m.key}">📎 View</span>`:'<span class="note-none">—</span>'}</td></tr>`;
+    }).join('') + `</tbody>`;
+  document.querySelectorAll('#drillTable .note-chip').forEach(c => {
+    c.addEventListener('click', () => openNote(+c.dataset.note2, c.dataset.mk));
+  });
+  openOverlay('drillOverlay');
+}
+
+/* ============================================================
+   Notesheet viewer
+   ============================================================ */
+function openNote(siteId, mk) {
+  mk = mk || state.month;
+  const r = records[siteId]?.[mk];
+  const s = sites.find(x => x.id === siteId);
+  if (!r || !r.note) { toast('No notesheet attached for this bill'); return; }
+  document.getElementById('noteTitle').textContent = 'Signed notesheet — ' + (s?.name || '');
+  document.getElementById('noteSub').textContent   = MONTHS.find(m => m.key === mk)?.label || mk;
+  document.getElementById('noteImg').src = r.note;
+  openOverlay('noteOverlay');
+}
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+const tip = document.getElementById('tip');
+function showTip(ev, html) {
+  tip.innerHTML=html; tip.style.opacity=1;
+  let x=ev.clientX+14, y=ev.clientY+14;
+  if (x+240>window.innerWidth) x=ev.clientX-240;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip() { tip.style.opacity=0; }
+
+/* ============================================================
+   Data-entry form — API-backed save
+   ============================================================ */
+let pendingNoteFile = null;
+
+function syncModeField() {
+  const paid = document.getElementById('fStatus').value === 'Paid';
+  document.getElementById('fMode').disabled = !paid;
+  document.getElementById('fModeHint').textContent = paid ? 'Cash-branch settlement mode for this payment.' : 'Enabled when stage is Paid.';
+}
+function fillFormSelectors() {
+  document.getElementById('fSite').innerHTML  = sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('fMonth').innerHTML = MONTHS.slice().reverse().map(m => `<option value="${m.key}">${m.label}</option>`).join('');
+  const upd = () => {
+    const b=+document.getElementById('fBilled').value||0, p=+document.getElementById('fPenalty').value||0;
+    document.getElementById('fNet').value = rupees(Math.max(0,b-p));
+  };
+  document.getElementById('fBilled').addEventListener('input',upd);
+  document.getElementById('fPenalty').addEventListener('input',upd);
+  document.getElementById('fStatus').addEventListener('change',syncModeField);
+  document.getElementById('fNote').addEventListener('change', e => {
+    const f=e.target.files[0]; if (!f) return;
+    pendingNoteFile = f;
+    const rd=new FileReader();
+    rd.onload=()=>{ const pv=document.getElementById('notePreview'); pv.style.display='block'; document.getElementById('notePreviewImg').src=rd.result; };
+    rd.readAsDataURL(f);
+  });
+}
+function openForm() {
+  pendingNoteFile = null;
+  document.getElementById('notePreview').style.display='none';
+  document.getElementById('fNote').value='';
+  document.getElementById('fMonth').value=state.month;
+  ['fBilled','fPenalty','fNet'].forEach(id=>document.getElementById(id).value='');
+  const today=new Date();
+  document.getElementById('fDate').value = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  syncModeField();
+  openOverlay('formOverlay');
+}
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const sid    = +document.getElementById('fSite').value;
+  const mk     = document.getElementById('fMonth').value;
+  const billed = +document.getElementById('fBilled').value  || 0;
+  const penalty= +document.getElementById('fPenalty').value || 0;
+  const status = document.getElementById('fStatus').value;
+  if (billed<=0)      { toast('Enter a gross billed amount'); return; }
+  if (penalty>billed) { toast("Penalty can't exceed billed amount"); return; }
+
+  const dv    = document.getElementById('fDate').value;
+  const stamp = dv ? new Date(dv+'T12:00:00').toISOString() : new Date().toISOString();
+
+  // Build timestamps — preserve earlier stages, set/overwrite current stage
+  const prev  = records[sid]?.[mk];
+  const STAGE_FIELDS = { Submitted:'submitted_at', Verified:'verified_at', Approved:'approved_at', Paid:'paid_at' };
+  const timestamps = {
+    submitted_at: prev?.dates?.Submitted ? new Date(prev.dates.Submitted).toISOString() : null,
+    verified_at:  prev?.dates?.Verified  ? new Date(prev.dates.Verified).toISOString()  : null,
+    approved_at:  prev?.dates?.Approved  ? new Date(prev.dates.Approved).toISOString()  : null,
+    paid_at:      prev?.dates?.Paid      ? new Date(prev.dates.Paid).toISOString()      : null,
+    hold_since:   null
+  };
+  if (status==='On Hold') timestamps.hold_since = stamp;
+  else timestamps[STAGE_FIELDS[status]] = stamp;
+
+  const saveBtn = document.getElementById('saveBtn');
+  saveBtn.textContent='Saving…'; saveBtn.disabled=true;
+  try {
+    // Upload notesheet first (if new file selected)
+    if (pendingNoteFile) {
+      const fd = new FormData(); fd.append('notesheet', pendingNoteFile);
+      await fetch(API_BASE+`/api/bills/${sid}/${mk}/notesheet`, {
+        method:'POST', headers:{'Authorization':'Bearer '+getToken()}, body:fd
+      });
+    }
+    // Upsert bill record
+    const payload = {
+      billed, penalty, status,
+      payment_mode: status==='Paid' ? document.getElementById('fMode').value : (prev?.mode||null),
+      ...timestamps
+    };
+    const result = await apiFetch('PUT', `/api/bills/${sid}/${mk}`, payload);
+    if (result) {
+      if (!records[sid]) records[sid]={};
+      records[sid][mk] = transformBill(result);
+      closeOverlays(); renderAll();
+      toast('Saved — '+sites.find(s=>s.id===sid)?.name+' · '+MONTHS.find(m=>m.key===mk)?.label);
+    }
+  } catch (e) {
+    toast('Save failed: '+e.message);
+  } finally {
+    saveBtn.textContent='Save bill'; saveBtn.disabled=false;
+  }
+});
+
+/* ============================================================
+   Overlays / toast
+   ============================================================ */
+function openOverlay(id) { document.getElementById(id).classList.add('open'); }
+function closeOverlays() { document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('open')); }
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',closeOverlays));
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeOverlays();}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOverlays();});
+let toastT;
+function toast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2800); }
+
+/* ============================================================
+   Controls
+   ============================================================ */
+function initControls() {
+  const ms = document.getElementById('monthSel');
+  ms.innerHTML = MONTHS.slice().reverse().map(m=>`<option value="${m.key}">${m.label}</option>`).join('');
+  ms.value = state.month;
+  ms.addEventListener('change', () => { state.month=ms.value; renderAll(); });
+
+  const regions = [...new Set(sites.map(s=>s.region))];
+  document.getElementById('regionSel').innerHTML =
+    `<option value="all">All regions</option>` + regions.map(r=>`<option>${r}</option>`).join('');
+  document.getElementById('regionSel').addEventListener('change',e=>{ state.region=e.target.value; renderAll(); });
+  document.getElementById('statusSel').addEventListener('change',e=>{ state.status=e.target.value; renderTable(); });
+  document.getElementById('searchBox').addEventListener('input', e=>{ state.search=e.target.value; renderTable(); });
+
+  document.querySelectorAll('#siteTable th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const k=th.dataset.sort;
+      if (state.sort===k) state.dir*=-1; else { state.sort=k; state.dir=(k==='name'||k==='region')?1:-1; }
+      document.querySelectorAll('#siteTable th').forEach(h=>h.textContent=h.textContent.replace(/ [▾▴]$/,''));
+      th.textContent+=state.dir<0?' ▾':' ▴';
+      renderTable();
+    });
+  });
+
+  document.getElementById('addBtn').addEventListener('click', openForm);
+  document.getElementById('logoutBtn').addEventListener('click', () => { clearToken(); location.reload(); });
+  document.getElementById('themeBtn').addEventListener('click', toggleTheme);
+  document.getElementById('loginBtn').addEventListener('click', doLogin);
+  document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+}
+
+function toggleTheme() {
+  const h=document.documentElement, dark=h.getAttribute('data-theme')==='dark';
+  h.setAttribute('data-theme', dark?'light':'dark');
+  document.getElementById('themeBtn').textContent = dark?'🌙':'☀️';
+  renderCharts();
+}
+
+/* ============================================================
+   Render orchestration
+   ============================================================ */
+function cssVar(n) { return getComputedStyle(document.body).getPropertyValue(n).trim(); }
+function renderCharts() {
+  const s = seriesForRegion(state.region);
+  lineChart('trendChart', MONTHS, [
+    { name:'Gross billed', color:cssVar('--billed'), values:s.billed, fill:true },
+    { name:'Net payable',  color:cssVar('--net'),    values:s.net }
+  ]);
+  barChart('penaltyChart', MONTHS, s.penalty, cssVar('--penalty'));
+}
+function renderAll() { renderKpis(); renderCharts(); renderFunnel(); renderModes(); renderTable(); }
+
+/* ── Boot ── */
+initApp();
+</script>
+</body>
+</html>
